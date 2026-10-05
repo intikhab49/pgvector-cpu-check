@@ -51,7 +51,7 @@ docker build -q --platform "linux/$arch" -t "$tag" "$ctx" >/dev/null
 
 mkdir -p "$out/cores" && chmod 777 "$out/cores"
 timeout 7200 docker run --rm --platform "linux/$arch" --user 0 --entrypoint "" -e CPUS="$cpus" \
-  --ulimit core=-1 -v "$out/cores:/cores" \
+  --ulimit core=-1 --shm-size=1g -v "$out/cores:/cores" \
   "$tag" bash /usr/local/bin/cpuaudit-inner.sh > "$out/inner.log" 2>&1 || true
 grep '^RESULT' "$out/inner.log" | cut -f2- > "$out/results.tsv" || true
 grep '^INFO' "$out/inner.log" | cut -f2- >> "$out/info.tsv" || true
