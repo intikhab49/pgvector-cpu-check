@@ -129,6 +129,10 @@ if not hit:
         ev, em = exec_loads[0]
         base = pc_seg - (ev & ~0xfff)
         exec_len = ((ev + em + 0xfff) & ~0xfff) - (ev & ~0xfff)
+        if pkglib and str(lib_path).startswith(rootfs + pkglib):
+            print(f"LAYOUT\t{lib_path.name}\texec 0x{ev:x}+0x{em:x} len 0x{exec_len:x} vs pc mapping 0x{pc_range[1] - pc_range[0]:x}"
+                  f"\tsegs {[hex(v) + '+' + hex(m) + fl.replace(' ', '') for v, m, fl in loads]}"
+                  f"\tmissing {[hex(base + (v & ~0xfff)) for v, _m, _fl in loads if base + (v & ~0xfff) not in starts]}", file=sys.stderr)
         # the PC's mapping must be exactly this library's code segment, and every other segment must be there
         if base % 4096 == 0 and exec_len == pc_range[1] - pc_range[0]                 and all(base + (v & ~0xfff) in starts for v, _m, _fl in loads):
             matches.append((str(lib_path)[len(rootfs):], base))
