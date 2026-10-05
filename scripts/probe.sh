@@ -40,7 +40,7 @@ cp "$here/inner.sh" "$ctx/inner.sh"
 cat > "$ctx/Dockerfile" <<EOF
 FROM --platform=linux/amd64 debian:${QEMU_DEBIAN:-trixie}-slim AS qemu
 RUN apt-get -o Acquire::Retries=5 update \
- && apt-get -o Acquire::Retries=5 install -y --no-install-recommends qemu-user-static file \
+ && apt-get -o Acquire::Retries=5 install -y --no-install-recommends "$( [ "${QEMU_DEBIAN:-trixie}" = bookworm ] && echo qemu-user-static || echo qemu-user )" file \
  && rm -rf /var/lib/apt/lists/* \
  && q="\$(ls /usr/bin/$qemu /usr/bin/${qemu%-static} 2>/dev/null | head -n1)" \
  && cp -L "\$q" /cpuaudit-qemu && file /cpuaudit-qemu | grep -q 'statically linked' \
