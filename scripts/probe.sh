@@ -38,12 +38,16 @@ fi
 ctx="$(mktemp -d)"
 cp "$here/inner.sh" "$ctx/inner.sh"
 cat > "$ctx/Dockerfile" <<EOF
-FROM --platform=linux/amd64 debian:bookworm-slim AS qemu
+FROM --platform=linux/amd64 debian:${QEMU_DEBIAN:-trixie}-slim AS qemu
 RUN apt-get -o Acquire::Retries=5 update \
- && apt-get -o Acquire::Retries=5 install -y --no-install-recommends qemu-user-static \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get -o Acquire::Retries=5 install -y --no-install-recommends qemu-user-static file \
+ && rm -rf /var/lib/apt/lists/* \
+ && q="\$(ls /usr/bin/$qemu /usr/bin/${qemu%-static} 2>/dev/null | head -n1)" \
+ && cp -L "\$q" /cpuaudit-qemu && file /cpuaudit-qemu | grep -q 'statically linked' \
+ && /cpuaudit-qemu --version | head -n1 > /cpuaudit-qemu.version
 FROM $image
-COPY --from=qemu /usr/bin/$qemu /usr/local/bin/cpuaudit-qemu
+COPY --from=qemu /cpuaudit-qemu /usr/local/bin/cpuaudit-qemu
+COPY --from=qemu /cpuaudit-qemu.version /usr/local/share/cpuaudit-qemu.version
 COPY inner.sh /usr/local/bin/cpuaudit-inner.sh
 EOF
 tag="cpuaudit-probe:$$"

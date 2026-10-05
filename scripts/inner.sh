@@ -34,6 +34,7 @@ if [[ "${1:-}" != phase2 ]]; then
   export PG_BIN="$pg_bin"
   echo "INFO	pg_bin	$pg_bin"
   echo "INFO	version	$("$pg_bin/postgres" --version 2>&1)"
+  echo "INFO	qemu	$(cat /usr/local/share/cpuaudit-qemu.version 2>/dev/null)"
   if [[ -x "$pg_bin/pg_config" ]]; then echo "INFO	pkglibdir	$("$pg_bin/pg_config" --pkglibdir)"; fi
   if [[ "$(id -u)" != 0 ]]; then exec bash "$0" phase2; fi
   if id postgres >/dev/null 2>&1; then
