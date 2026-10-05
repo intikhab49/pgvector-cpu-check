@@ -68,6 +68,7 @@ if [[ -n "$pkglib" ]]; then
 fi
 if compgen -G "$out/cores/*.core" >/dev/null && [[ -n "$pg_bin" ]]; then
   mkdir -p "$ctx/rootfs" "$out/explain"
+  sudo chmod -R a+rX "$out/cores" 2>/dev/null || true   # cores are 0600, owned by the container's postgres user
   docker export "$cid" | tar -x -C "$ctx/rootfs" --exclude='dev/*' --exclude='proc/*' --exclude='sys/*' 2>/dev/null || true
   : > "$out/explain.tsv"
   for core in "$out"/cores/*.core; do

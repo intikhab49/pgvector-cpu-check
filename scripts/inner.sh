@@ -178,21 +178,31 @@ crash_detail() {
 run_suite() { # run_suite SUITE CPU -> prints status
   local s="$1" cpu="$2" db
   db="t_${s}_$(echo "$cpu" | tr -c 'a-zA-Z0-9\n' '_')"
+  : > "$work/out.txt"
   if ! start_server "$cpu" "${SUITE_PRELOAD[$s]:-}"; then
     printf 'FAIL\tserver did not start: %s' "$(crash_detail || tail -n1 "$log")"; stop_server; return
   fi
-  "$psql_bin" -qc "CREATE DATABASE $db" >/dev/null 2>&1
+  if ! "$psql_bin" -qc "CREATE DATABASE $db" >"$work/createdb.txt" 2>&1; then
+    printf 'FAIL\tCREATE DATABASE failed: %s' "$(crash_detail | grep . || tr '\n' ' ' <"$work/createdb.txt" | cut -c1-200)"
+    dump_log "$s" "$cpu"; save_core "$s" "$cpu"; stop_server; return
+  fi
   if printf '%s\n' "${SUITE_SQL[$s]}" | timeout 900 "$psql_bin" -d "$db" -v ON_ERROR_STOP=1 -At >"$work/out.txt" 2>&1 \
      && grep -q 'cpuaudit-ok' "$work/out.txt"; then
     printf 'PASS\t%s' "$(grep -E '^[0-9{]' "$work/out.txt" | tr '\n' ' ' | cut -c1-160)"
   else
     sleep 2
     printf 'FAIL\t%s' "$(crash_detail)"
+    dump_log "$s" "$cpu"
     save_core "$s" "$cpu"
   fi
   "$psql_bin" -qc "DROP DATABASE IF EXISTS $db" >/dev/null 2>&1
   stop_server
   rm -f "$data"/qemu_*.core "$work"/qemu_*.core
+}
+# Server log tail and psql output of a failed suite go to stderr (the job's inner.log) for diagnosis.
+dump_log() {
+  { echo "--- $1 on $2: server log tail"; tail -n 25 "$log"; echo "--- psql output tail"; tail -n 8 "$work/out.txt" 2>/dev/null; } \
+    | sed 's/^/DIAG\t/' >&2
 }
 # QEMU user mode writes the guest's own ELF core (qemu_<prog>_<time>_<pid>.core) into the crashing
 # process's working directory; the host side opens it in gdb to name the faulting instruction.
