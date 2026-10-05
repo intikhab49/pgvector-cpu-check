@@ -19,11 +19,12 @@ find_pg_bin() {
   [[ -n "$d" ]] && dirname "$d"
 }
 
-as_user() { # as_user UID GID CMD...
+as_user() { # as_user UID GID CMD...  (first tool that can actually drop privileges here)
   local u="$1" g="$2"; shift 2
-  if command -v setpriv >/dev/null 2>&1; then setpriv --reuid "$u" --regid "$g" --clear-groups "$@"
-  elif command -v gosu >/dev/null 2>&1; then gosu "$u:$g" "$@"
-  elif command -v su-exec >/dev/null 2>&1; then su-exec "$u:$g" "$@"
+  if command -v gosu >/dev/null 2>&1 && gosu "$u:$g" true 2>/dev/null; then gosu "$u:$g" "$@"
+  elif command -v su-exec >/dev/null 2>&1 && su-exec "$u:$g" true 2>/dev/null; then su-exec "$u:$g" "$@"
+  elif command -v setpriv >/dev/null 2>&1 && setpriv --reuid "$u" --regid "$g" --clear-groups true 2>/dev/null; then
+    setpriv --reuid "$u" --regid "$g" --clear-groups "$@"
   else chroot --userspec="$u:$g" --skip-chdir / "$@"; fi
 }
 
@@ -198,7 +199,8 @@ run_suite() { # run_suite SUITE CPU -> prints status
 save_core() {
   local core
   [[ -d /cores && -w /cores ]] || return 0
-  core="$(ls -t "$data"/qemu_*.core "$work"/qemu_*.core 2>/dev/null | head -n1)"
+  # native crashes: the host's kernel.core_pattern points into /cores (core.native.<pid>)
+  core="$(ls -t "$data"/qemu_*.core "$work"/qemu_*.core /cores/core.native.* 2>/dev/null | head -n1)"
   [[ -n "$core" ]] && mv "$core" "/cores/$1@$2.core" 2>/dev/null
   return 0
 }
@@ -211,8 +213,10 @@ stop_server
 echo "INFO	extensions	$available"
 
 cpus_ok=""
+qemu_models="$(/usr/local/bin/cpuaudit-qemu -cpu help 2>&1)"
 for cpu in $CPUS; do
-  if /usr/local/bin/cpuaudit-qemu -cpu help 2>/dev/null | grep -qiw -- "$cpu"; then cpus_ok="$cpus_ok $cpu"
+  # Not "qemu -cpu help | grep -q": under pipefail grep's early exit SIGPIPEs qemu and fails the test.
+  if grep -qiw -- "$cpu" <<<"$qemu_models"; then cpus_ok="$cpus_ok $cpu"
   else printf 'RESULT\t-\t%s\tSKIP\tQEMU has no such CPU model\n' "$cpu"; fi
 done
 
@@ -221,7 +225,8 @@ for s in $SUITES; do
   if [[ -n "$ext" && " $available " != *" $ext="* ]]; then continue; fi
   native="$(run_suite "$s" native)"
   printf 'RESULT\t%s\tnative\t%s\n' "$s" "$native"
-  if [[ "$native" != PASS* ]]; then
+  # A native SIGILL still runs every CPU model: each one's core shows where its floor is.
+  if [[ "$native" != PASS* && "$native" != *"signal 4"* ]]; then
     for cpu in $cpus_ok; do printf 'RESULT\t%s\t%s\tN/A\tsuite fails natively\n' "$s" "$cpu"; done
     continue
   fi

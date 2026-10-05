@@ -59,6 +59,8 @@ jobs:
         run: |
           sudo apt-get -o Acquire::Retries=5 update -qq
           sudo apt-get -o Acquire::Retries=5 install -y -qq --no-install-recommends gdb-multiarch binutils-aarch64-linux-gnu >/dev/null
+          # A process that dies natively writes its core into the /cores bind mount inside its container.
+          sudo sysctl -w kernel.core_pattern=/cores/core.native.%p
       - name: Probe
         env:
           NAME: ${{ matrix.name }}
