@@ -207,13 +207,23 @@ dump_log() {
 # QEMU user mode writes the guest's own ELF core (qemu_<prog>_<time>_<pid>.core) into the crashing
 # process's working directory; the host side opens it in gdb to name the faulting instruction.
 save_core() {
-  local core
+  local core size prev=-1 i
   [[ -d /cores && -w /cores ]] || return 0
+  # The crashed process is still writing its core while the client already sees the error. The postmaster
+  # logs "all server processes terminated" only after it has reaped it; then the size must stop changing.
+  # (Moving too early copies a truncated core across filesystems: gdb then reads zeros at the PC.)
+  for i in $(seq 1 240); do grep -q 'all server processes terminated' "$log" && break; sleep 0.5; done
   # Native crashes: the host's kernel.core_pattern writes /cores/core.native.<pid>. Emulated crashes:
   # take only QEMU's guest core; the kernel also dumps QEMU's own (x86) process, which is useless here.
   if [[ "$2" == native ]]; then core="$(ls -t /cores/core.native.* 2>/dev/null | head -n1)"
   else core="$(ls -t "$data"/qemu_*.core "$work"/qemu_*.core 2>/dev/null | head -n1)"; fi
-  [[ -n "$core" ]] && mv "$core" "/cores/$1@$2.core" 2>/dev/null
+  [[ -n "$core" ]] || return 0
+  for i in $(seq 1 120); do
+    size="$(stat -c %s "$core" 2>/dev/null || echo 0)"
+    [[ "$size" == "$prev" ]] && break
+    prev="$size"; sleep 1
+  done
+  mv "$core" "/cores/$1@$2.core" 2>/dev/null
   return 0
 }
 
