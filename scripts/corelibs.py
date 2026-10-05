@@ -122,24 +122,40 @@ if not hit:
     matches = []
     for lib_path in candidates:
         out = subprocess.run(["readelf", "-lW", str(lib_path)], capture_output=True, text=True).stdout
-        loads = [(int(v, 16), int(m, 16), fl) for v, m, fl in re.findall(r"^\s*LOAD\s+0x[0-9a-f]+\s+(0x[0-9a-f]+)\s+0x[0-9a-f]+\s+0x[0-9a-f]+\s+(0x[0-9a-f]+)\s+([RWE ]+?)\s+0x", out, re.M)]
-        exec_loads = [(v, m) for v, m, fl in loads if "E" in fl]
+        loads = [(int(o, 16), int(v, 16), int(fs, 16), int(m, 16), fl) for o, v, fs, m, fl in re.findall(
+            r"^\s*LOAD\s+(0x[0-9a-f]+)\s+(0x[0-9a-f]+)\s+0x[0-9a-f]+\s+(0x[0-9a-f]+)\s+(0x[0-9a-f]+)\s+([RWE ]+?)\s+0x", out, re.M)]
+        exec_loads = [(v, m) for _o, v, _fs, m, fl in loads if "E" in fl]
         if not exec_loads or pc_seg is None:
             continue
         ev, em = exec_loads[0]
         base = pc_seg - (ev & ~0xfff)
-        exec_len = ((ev + em + 0xfff) & ~0xfff) - (ev & ~0xfff)
-        if pkglib and str(lib_path).startswith(rootfs + pkglib):
-            print(f"LAYOUT\t{lib_path.name}\texec 0x{ev:x}+0x{em:x} len 0x{exec_len:x} vs pc mapping 0x{pc_range[1] - pc_range[0]:x}"
-                  f"\tsegs {[hex(v) + '+' + hex(m) + fl.replace(' ', '') for v, m, fl in loads]}"
-                  f"\tmissing {[hex(base + (v & ~0xfff)) for v, _m, _fl in loads if base + (v & ~0xfff) not in starts]}", file=sys.stderr)
-        # the PC's mapping must be exactly this library's code segment, and every other segment must be there
-        if base % 4096 == 0 and exec_len == pc_range[1] - pc_range[0]                 and all(base + (v & ~0xfff) in starts for v, _m, _fl in loads):
-            matches.append((str(lib_path)[len(rootfs):], base))
-    if len(matches) == 1:
-        hit = matches[0]
+        # layout: page-aligned base, PC inside the code segment, every segment start present in the core
+        if base % 4096 or not (base + ev <= pc < base + ev + em) \
+                or not all(base + (v & ~0xfff) in starts for _o, v, _fs, _m, _fl in loads):
+            continue
+        # contents: initial bytes of the writable segment, file vs core (relocated pointers will differ)
+        blob = lib_path.read_bytes()
+        same = total = 0
+        for o, v, fs, _m, fl in loads:
+            if "W" not in fl or not fs:
+                continue
+            for page in range(0, fs, 4096):
+                n = min(4096, fs - page)
+                mem = read(base + v + page, n)
+                if mem is None:
+                    continue
+                ref = blob[o + page:o + page + n]
+                same += sum(1 for a, b in zip(mem, ref) if a == b)
+                total += n
+        score = same / total if total >= 256 else 0.0
+        print(f"LAYOUT\t{str(lib_path)[len(rootfs):]}\tbase 0x{base:x}\tdata match {same}/{total} = {score:.2f}", file=sys.stderr)
+        matches.append((score, str(lib_path)[len(rootfs):], base))
+    matches.sort(reverse=True)
+    if matches and matches[0][0] >= 0.5 and (len(matches) == 1 or matches[0][0] - matches[1][0] >= 0.15):
+        hit = (matches[0][1], matches[0][2])
+        print(f"LAYOUT\tchosen {hit[0]} (data match {matches[0][0]:.2f}, next {matches[1][0] if len(matches) > 1 else 0:.2f})", file=sys.stderr)
     elif matches:
-        print(f"?\tPC 0x{pc:x} matches several libraries by layout: {', '.join(m[0] for m in matches)}")
+        print(f"?\tPC 0x{pc:x} ambiguous by layout and data: " + ", ".join(f"{m[1]}={m[0]:.2f}" for m in matches[:5]))
         sys.exit(0)
 if not hit:
     print(f"?\tPC 0x{pc:x} not in any of {len(libs)} recovered libraries or the executable")
