@@ -43,7 +43,7 @@ RUN apt-get -o Acquire::Retries=5 update \
  && apt-get -o Acquire::Retries=5 install -y --no-install-recommends "$( [ "${QEMU_DEBIAN:-trixie}" = bookworm ] && echo qemu-user-static || echo qemu-user )" file \
  && rm -rf /var/lib/apt/lists/* \
  && q="\$(ls /usr/bin/$qemu /usr/bin/${qemu%-static} 2>/dev/null | head -n1)" \
- && cp -L "\$q" /cpuaudit-qemu && file /cpuaudit-qemu | grep -q 'statically linked' \
+ && cp -L "\$q" /cpuaudit-qemu && file /cpuaudit-qemu | grep -qE 'statically linked|static-pie linked' \
  && /cpuaudit-qemu --version | head -n1 > /cpuaudit-qemu.version
 FROM $image
 COPY --from=qemu /cpuaudit-qemu /usr/local/bin/cpuaudit-qemu
