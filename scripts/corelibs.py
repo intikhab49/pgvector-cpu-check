@@ -104,27 +104,33 @@ hit = next(((p, a) for p, (a, size) in libs.items() if a <= pc < a + size), None
 # extension's entry is allocated late): match each candidate library's PT_LOAD layout, page by page, against
 # the core's segment starts. Only the right file at the right base fits all of its segments.
 if not hit:
-    starts = set()
+    starts, ranges = set(), []
     for i in range(phnum):
         p_type, _f, _o, p_vaddr, _p, _fs, p_memsz = struct.unpack_from("<IIQQQQQ", data, phoff + i * phentsize)
         if p_type == 1:
             starts.add(p_vaddr)
-    pc_seg = max((s for s in starts if s <= pc), default=None)
+            ranges.append((p_vaddr, p_vaddr + p_memsz))
+    pc_range = next(((a, b) for a, b in sorted(ranges) if a <= pc < b), None)
+    pc_seg = pc_range[0] if pc_range else None
     pkglib = sys.argv[6] if len(sys.argv) > 6 else ""
     candidates = []
     for d in filter(None, [pkglib, "/usr/lib", "/usr/local/lib", "/lib", "/usr/lib/aarch64-linux-gnu", "/usr/lib/x86_64-linux-gnu"]):
         root = pathlib.Path(rootfs + d)
         if root.is_dir():
-            candidates += [p for p in root.rglob("*.so*") if p.is_file() and not p.is_symlink()]
+            candidates += [p.resolve() for p in root.rglob("*.so*") if p.is_file() and not p.is_symlink()]
+    candidates = sorted(set(candidates))
     matches = []
     for lib_path in candidates:
         out = subprocess.run(["readelf", "-lW", str(lib_path)], capture_output=True, text=True).stdout
-        loads = [(int(v, 16), fl) for v, fl in re.findall(r"^\s*LOAD\s+0x[0-9a-f]+\s+(0x[0-9a-f]+)\s+0x[0-9a-f]+\s+0x[0-9a-f]+\s+0x[0-9a-f]+\s+([RWE ]+?)\s+0x", out, re.M)]
-        exec_loads = [v for v, fl in loads if "E" in fl]
+        loads = [(int(v, 16), int(m, 16), fl) for v, m, fl in re.findall(r"^\s*LOAD\s+0x[0-9a-f]+\s+(0x[0-9a-f]+)\s+0x[0-9a-f]+\s+0x[0-9a-f]+\s+(0x[0-9a-f]+)\s+([RWE ]+?)\s+0x", out, re.M)]
+        exec_loads = [(v, m) for v, m, fl in loads if "E" in fl]
         if not exec_loads or pc_seg is None:
             continue
-        base = pc_seg - (exec_loads[0] & ~0xfff)
-        if base % 4096 == 0 and all(base + (v & ~0xfff) in starts for v, _ in loads):
+        ev, em = exec_loads[0]
+        base = pc_seg - (ev & ~0xfff)
+        exec_len = ((ev + em + 0xfff) & ~0xfff) - (ev & ~0xfff)
+        # the PC's mapping must be exactly this library's code segment, and every other segment must be there
+        if base % 4096 == 0 and exec_len == pc_range[1] - pc_range[0]                 and all(base + (v & ~0xfff) in starts for v, _m, _fl in loads):
             matches.append((str(lib_path)[len(rootfs):], base))
     if len(matches) == 1:
         hit = matches[0]
