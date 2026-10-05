@@ -23,3 +23,6 @@ if [[ -z "$summary" || "$summary" == '?'* ]]; then
 fi
 printf '%s\n' "$summary"
 printf '%s\n' "$raw"
+cat "$map" 2>/dev/null; rm -f "$map"
+ls -l "$core" | awk '{print "CORE\t" $5 " bytes"}'
+readelf -lW "$core" 2>/dev/null | awk '$1=="LOAD"' | sort -k3 | awk '{print "SEG\t" $3 "\tfilesz=" $5 "\tmemsz=" $6 "\t" $7}' | tail -n 60
