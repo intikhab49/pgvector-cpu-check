@@ -44,7 +44,8 @@ if [[ "${1:-}" != phase2 ]]; then
   fi
   mkdir -p /tmp/cpuaudit && chown "$uid:$gid" /tmp/cpuaudit
   export HOME=/tmp/cpuaudit
-  exec as_user "$uid" "$gid" bash "$0" phase2
+  as_user "$uid" "$gid" bash "$0" phase2
+  exit $?
 fi
 
 # ---------- phase 2: non-root ----------

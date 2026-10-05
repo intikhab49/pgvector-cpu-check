@@ -36,6 +36,12 @@ ARM = {
     "rcpc": re.compile(r"\bldapr\w*\b"),
 }
 CLASSES = X86 if arch == "amd64" else ARM
+# Highest requirement first. QEMU models in the dynamic test: Nehalem < SandyBridge < IvyBridge < Haswell.
+FLOOR = [("avx512", "AVX-512 (fails on Haswell and every AMD before Zen 4)"), ("avx2", "AVX2 (Haswell)"),
+         ("fma", "FMA (Haswell)"), ("f16c", "F16C (IvyBridge)"), ("avx", "AVX (SandyBridge)"), ("bmi", "BMI (Haswell)")] \
+    if arch == "amd64" else \
+        [("sve", "SVE (Neoverse V1/Graviton3+; not Pi, Graviton2, Ampere Altra)"), ("fp16", "ARMv8.2 FP16 (not Pi 3/4)"),
+         ("dotprod", "ARMv8.2 dot product (not Pi 3/4)"), ("rcpc", "ARMv8.3 RCpc"), ("lse", "ARMv8.1 LSE atomics (not Pi 3/4)")]
 FUNC_RE = re.compile(r"^[0-9a-f]+ <(.+)>:$")
 
 
@@ -64,7 +70,8 @@ def fingerprint(path):
         for name, rx in CLASSES.items():
             if rx.search(insn):
                 funcs[current].add(name)
-    n = max(len(funcs), 1)
+    # libgcc's outline-atomics helpers (__aarch64_ldadd4_acq_rel, ...) pick LSE at runtime themselves.
+    funcs = {f: c for f, c in funcs.items() if not f.startswith("__aarch64_")}
     counts = {name: sum(1 for c in funcs.values() if name in c) for name in CLASSES}
 
     evidence = []
@@ -91,18 +98,16 @@ def fingerprint(path):
     for m in re.finditer(r"-(march|mcpu)=[\w.+-]+|target-cpu=\w+|target-feature=[+\w,-]+", strs):
         flags = flags or m.group(0)
 
-    # Verdict: global flag if the top class spreads across many functions with no dispatch at all.
-    top = max(counts, key=lambda k: counts[k]) if counts else ""
-    share = counts.get(top, 0) / n
-    advanced = {k: v for k, v in counts.items() if v and k not in ("sse4", "popcnt", "crypto")}
-    if not advanced:
-        verdict = "baseline"
-    elif share > 0.15 and not evidence:
-        verdict = f"global-flag? ({top} in {share:.0%} of functions, no dispatch)"
-    elif evidence:
-        verdict = "dispatch-present"
+    # Verdict: the lowest CPU this library needs. Runtime dispatch guards a handful of kernels
+    # (pgvector: ~2-6 functions with target attributes); a class found in more functions than that,
+    # or in any function when there is no dispatch at all, came from a global compiler flag.
+    limit = 10 if evidence else 1
+    floor = next(((cls, label) for cls, label in FLOOR if counts.get(cls, 0) >= limit), None)
+    if floor:
+        sample = sorted(f for f, c in funcs.items() if floor[0] in c)[:4]
+        verdict = f"needs {floor[1]}: {floor[0]} in {counts[floor[0]]}/{len(funcs)} functions, e.g. {', '.join(sample)}"
     else:
-        verdict = "local-use, no dispatch seen"
+        verdict = "baseline (newer instructions only behind dispatch)" if any(counts.get(c) for c, _ in FLOOR) else "baseline"
     cols = [path.name, f"functions={len(funcs)}"] + [f"{k}={v}" for k, v in counts.items() if v]
     cols += [f"dispatch={','.join(evidence) or 'none'}", f"compiler={'; '.join(compilers) or '?'}"]
     if flags:
