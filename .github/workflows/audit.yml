@@ -1,0 +1,90 @@
+name: audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: Only images whose name contains this text (empty = all)
+        required: false
+        default: ""
+      arches:
+        description: Architectures to probe
+        required: false
+        default: "amd64 arm64"
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      include: ${{ steps.m.outputs.include }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: m
+        env:
+          FILTER: ${{ inputs.filter }}
+          ARCHES: ${{ inputs.arches }}
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json, os, re
+          images = json.load(open("images.json"))
+          rows = []
+          for img in images:
+              if os.environ["FILTER"] and os.environ["FILTER"] not in img["name"]:
+                  continue
+              for arch in os.environ["ARCHES"].split():
+                  slug = re.sub(r"[^a-z0-9]+", "-", img["name"].lower()).strip("-")[:60] + "-" + arch
+                  rows.append({"name": img["name"], "ref": img[arch], "arch": arch, "slug": slug})
+          print("include=" + json.dumps(rows))
+          EOF
+
+  probe:
+    needs: matrix
+    name: ${{ matrix.name }} (${{ matrix.arch }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    steps:
+      - uses: actions/checkout@v7
+      - if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - name: Probe
+        env:
+          NAME: ${{ matrix.name }}
+          REF: ${{ matrix.ref }}
+          ARCH: ${{ matrix.arch }}
+          SLUG: ${{ matrix.slug }}
+        run: |
+          out="out/$SLUG"
+          bash scripts/probe.sh "$REF" "$ARCH" "$out"
+          jq -n --arg name "$NAME" --arg ref "$REF" --arg arch "$ARCH" '{name: $name, ref: $ref, arch: $arch}' > "$out/meta.json"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: results-${{ matrix.slug }}
+          path: out/${{ matrix.slug }}
+
+  report:
+    needs: probe
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: results-*
+          path: results
+      - run: |
+          python3 scripts/report.py results > report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: report
+          path: report.md

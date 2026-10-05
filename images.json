@@ -1,0 +1,16 @@
+[
+  {"name": "postgres:17 (control, no vector)", "amd64": "postgres:17", "arm64": "postgres:17"},
+  {"name": "pgvector/pgvector:pg17-trixie", "amd64": "pgvector/pgvector:pg17-trixie", "arm64": "pgvector/pgvector:pg17-trixie"},
+  {"name": "pgvector/pgvector:pg18-trixie", "amd64": "pgvector/pgvector:pg18-trixie", "arm64": "pgvector/pgvector:pg18-trixie"},
+  {"name": "bitnami/postgresql:latest", "amd64": "bitnami/postgresql:latest", "arm64": "bitnami/postgresql:latest"},
+  {"name": "lifeboat/postgresql:18", "amd64": "ghcr.io/intikhab49/lifeboat/postgresql:18", "arm64": "ghcr.io/intikhab49/lifeboat/postgresql:18"},
+  {"name": "timescale/timescaledb-ha:pg17.11-ts2.30.2", "amd64": "timescale/timescaledb-ha:pg17.11-ts2.30.2", "arm64": "timescale/timescaledb-ha:pg17.11-ts2.30.2"},
+  {"name": "supabase/postgres:17.11.0.004", "amd64": "supabase/postgres:17.11.0.004", "arm64": "supabase/postgres:17.11.0.004_arm64"},
+  {"name": "paradedb/paradedb:0.26.0-pg18", "amd64": "paradedb/paradedb:0.26.0-pg18", "arm64": "paradedb/paradedb:0.26.0-pg18"},
+  {"name": "tensorchord/vchord-postgres:pg17-v1.1.1", "amd64": "tensorchord/vchord-postgres:pg17-v1.1.1", "arm64": "tensorchord/vchord-postgres:pg17-v1.1.1-arm64"},
+  {"name": "immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0 (Immich default)", "amd64": "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0", "arm64": "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0"},
+  {"name": "immich-app/postgres:17-vectorchord1.1.1-pgvector0.8.5", "amd64": "ghcr.io/immich-app/postgres:17-vectorchord1.1.1-pgvector0.8.5", "arm64": "ghcr.io/immich-app/postgres:17-vectorchord1.1.1-pgvector0.8.5"},
+  {"name": "cloudnative-pg/postgresql:17-standard-trixie", "amd64": "ghcr.io/cloudnative-pg/postgresql:17-standard-trixie", "arm64": "ghcr.io/cloudnative-pg/postgresql:17-standard-trixie"},
+  {"name": "tecnativa/postgres-autoconf:18-alpine", "amd64": "tecnativa/postgres-autoconf:18-alpine", "arm64": "tecnativa/postgres-autoconf:18-alpine"},
+  {"name": "ankane/pgvector:latest (frozen 2023)", "amd64": "ankane/pgvector:latest", "arm64": "ankane/pgvector:latest"}
+]
