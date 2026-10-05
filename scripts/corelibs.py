@@ -8,7 +8,7 @@ For every "/....so" path string in the core we look for pointers to it (l_name) 
 l_ld - l_addr equals that library's real .dynamic address (read from the file in ROOTFS). That check makes
 false positives practically impossible. The instruction is then disassembled from the library file itself.
 
-Usage: scripts/corelibs.py ARCH CORE ROOTFS PC
+Usage: scripts/corelibs.py ARCH CORE ROOTFS PC [EXECUTABLE]
 Prints one line: <instruction>\t<function+0xoff> in <library> (offset 0x...)"""
 import bisect
 import functools
@@ -74,9 +74,29 @@ for v, o, sz in segs:
             if path in libs:
                 break
 
+# The main executable: its link_map name is empty, so place it with the ELF auxiliary vector instead
+# (NT_AUXV note: AT_ENTRY - e_entry = load base).
+exe = sys.argv[5] if len(sys.argv) > 5 else ""
+if exe:
+    for i in range(phnum):
+        p_type, _f, p_offset, _v, _p, p_filesz = struct.unpack_from("<IIQQQQ", data, phoff + i * phentsize)
+        if p_type != 4:  # PT_NOTE
+            continue
+        pos, end = p_offset, p_offset + p_filesz
+        while pos + 12 <= end:
+            namesz, descsz, ntype = struct.unpack_from("<III", data, pos)
+            desc = pos + 12 + ((namesz + 3) & ~3)
+            if ntype == 6:  # NT_AUXV
+                auxv = dict(struct.unpack_from("<QQ", data, desc + j) for j in range(0, descsz - 15, 16))
+                hdr = subprocess.run(["readelf", "-hW", rootfs + exe], capture_output=True, text=True).stdout
+                e_entry = re.search(r"Entry point address:\s+(0x[0-9a-f]+)", hdr)
+                if 9 in auxv and e_entry:
+                    libs[exe] = (auxv[9] - int(e_entry.group(1), 16), dynamic_vaddr_and_end(rootfs + exe)[1])
+            pos = desc + ((descsz + 3) & ~3)
+
 hit = next(((p, a) for p, (a, size) in libs.items() if a <= pc < a + size), None)
 if not hit:
-    print(f"?\tPC 0x{pc:x} not in any of {len(libs)} recovered libraries (main executable?)")
+    print(f"?\tPC 0x{pc:x} not in any of {len(libs)} recovered libraries or the executable")
     sys.exit(0)
 path, base = hit
 off = pc - base
