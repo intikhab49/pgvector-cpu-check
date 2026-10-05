@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Static fingerprint of PostgreSQL extension libraries: which instruction-set extensions each
+library uses, in how many of its functions, and whether it carries CPU-dispatch machinery.
+
+A library compiled with a global -march/target-cpu flag uses the newer instructions all over
+(memcpy-like loops, hashing, sorting). A library that dispatches at runtime keeps them inside a
+few kernels and calls cpuid / an IFUNC resolver / Rust's std_detect first.
+
+Usage: scripts/fingerprint.py ARCH LIBDIR > fingerprint.tsv
+Columns: file, functions, then per class "name=functions_using_it", dispatch evidence, compiler, verdict."""
+import pathlib
+import re
+import subprocess
+import sys
+
+arch, libdir = sys.argv[1], pathlib.Path(sys.argv[2])
+OBJDUMP = "objdump" if arch == "amd64" else "aarch64-linux-gnu-objdump"
+
+# Instruction classes, matched against one disassembled instruction (mnemonic + operands).
+X86 = {
+    "avx512": re.compile(r"%zmm|%k[0-7]\b|\{%k|vpternlog|vpermt2|vcompress|vexpand|vpopcnt[bwdq]"),
+    "avx2": re.compile(r"\bvp\w+\s.*%ymm|\bvperm(q|d|ps|pd|2i128)\b|\bvpbroadcast|\bvinserti128|\bvextracti128|\bvpgather|\bvgather"),
+    "avx": re.compile(r"%ymm|\bv(add|sub|mul|div|max|min|and|or|xor|blend|shuf|unpck|movap|movup|broadcastss|sqrt|cvt)\w*\s"),
+    "fma": re.compile(r"\bvfn?m(add|sub)"),
+    "f16c": re.compile(r"\bvcvt(ph2ps|ps2ph)\b"),
+    "bmi": re.compile(r"\b(tzcnt|lzcnt|andn|bextr|blsi|blsr|blsmsk|pdep|pext|shlx|shrx|sarx|rorx)\b"),
+    "popcnt": re.compile(r"\bpopcnt\b"),
+    "sse4": re.compile(r"\b(pminsd|pmaxsd|pmulld|ptest|pblendvb|blendvps|roundps|roundss|pcmpeqq|pextr[bdq]|pinsr[bdq]|crc32[bwlq]?|pcmpgtq|pcmp[ei]str[im])\b"),
+}
+ARM = {
+    "sve": re.compile(r"\bz\d+\.[bhsdq]\b|\bp\d+/[mz]\b|\bwhilelo\b|\bptrue\b"),
+    "fp16": re.compile(r"\bf\w+\s.*\bv\d+\.[48]h\b|\bf(add|sub|mul|mla|mls|max|min|div|abs|neg|sqrt|cvt\w*)\s+h\d+"),
+    "dotprod": re.compile(r"\b[su]dot\b"),
+    "lse": re.compile(r"\b(ldadd|ldclr|ldeor|ldset|ldsmax|ldsmin|ldumax|ldumin|swp|cas|casp)(a|l|al)?[bh]?\b"),
+    "crypto": re.compile(r"\b(aes[ed]|aesi?mc|sha1[chmps]\w*|sha256\w*|sha512\w*|pmull2?)\b"),
+    "rcpc": re.compile(r"\bldapr\w*\b"),
+}
+CLASSES = X86 if arch == "amd64" else ARM
+FUNC_RE = re.compile(r"^[0-9a-f]+ <(.+)>:$")
+
+
+def run(cmd):
+    return subprocess.run(cmd, capture_output=True, text=True, errors="replace").stdout
+
+
+def fingerprint(path):
+    funcs = {}
+    current = None
+    cpuid = 0
+    proc = subprocess.Popen([OBJDUMP, "-d", "--no-show-raw-insn", str(path)], stdout=subprocess.PIPE,
+                            text=True, errors="replace")
+    for line in proc.stdout:
+        line = line.rstrip("\n")
+        m = FUNC_RE.match(line)
+        if m:
+            current = m.group(1)
+            funcs[current] = set()
+            continue
+        if current is None or "\t" not in line:
+            continue
+        insn = line.split("\t", 1)[1]
+        if insn.startswith("cpuid"):
+            cpuid += 1
+        for name, rx in CLASSES.items():
+            if rx.search(insn):
+                funcs[current].add(name)
+    n = max(len(funcs), 1)
+    counts = {name: sum(1 for c in funcs.values() if name in c) for name in CLASSES}
+
+    evidence = []
+    dyn = run(["readelf", "--dyn-syms", "-W", str(path)])
+    if "IFUNC" in dyn:
+        evidence.append("ifunc")
+    if "__cpu_indicator_init" in dyn or "__cpu_model" in dyn:
+        evidence.append("gcc-cpu-supports")
+    proc.wait()
+    if cpuid:
+        evidence.append(f"cpuid x{cpuid}")
+    if arch == "arm64" and re.search(r"getauxval|AT_HWCAP|id_aa64", run(["strings", "-a", str(path)])):
+        evidence.append("hwcap")
+    strs = run(["strings", "-a", "-n", "8", str(path)])
+    if "std_detect" in strs or "is_x86_feature_detected" in strs or "is_aarch64_feature_detected" in strs:
+        evidence.append("rust-std_detect")
+    if re.search(r"multiversion|target_feature_dispatch", strs):
+        evidence.append("multiversion")
+
+    comment = run(["readelf", "-p", ".comment", str(path)])
+    compilers = sorted(set(re.findall(r"(GCC: \([^)]*\) [\d.]+|clang version [\d.]+|rustc version [\d.]+[^\s]*|Ubuntu clang[^\n]*)", comment)))
+    producer = re.search(r"DW_AT_producer\s*:.*?(-march=\S+|-mcpu=\S+|target-cpu=\S+)", run(["readelf", "--debug-dump=info", str(path)])[:2_000_000])
+    flags = producer.group(1) if producer else ""
+    for m in re.finditer(r"-(march|mcpu)=[\w.+-]+|target-cpu=\w+|target-feature=[+\w,-]+", strs):
+        flags = flags or m.group(0)
+
+    # Verdict: global flag if the top class spreads across many functions with no dispatch at all.
+    top = max(counts, key=lambda k: counts[k]) if counts else ""
+    share = counts.get(top, 0) / n
+    advanced = {k: v for k, v in counts.items() if v and k not in ("sse4", "popcnt", "crypto")}
+    if not advanced:
+        verdict = "baseline"
+    elif share > 0.15 and not evidence:
+        verdict = f"global-flag? ({top} in {share:.0%} of functions, no dispatch)"
+    elif evidence:
+        verdict = "dispatch-present"
+    else:
+        verdict = "local-use, no dispatch seen"
+    cols = [path.name, f"functions={len(funcs)}"] + [f"{k}={v}" for k, v in counts.items() if v]
+    cols += [f"dispatch={','.join(evidence) or 'none'}", f"compiler={'; '.join(compilers) or '?'}"]
+    if flags:
+        cols.append(f"flags={flags}")
+    cols.append(f"verdict={verdict}")
+    return "\t".join(cols)
+
+
+# PostgreSQL's own contrib/PL libraries are noise: only the vector/search/timeseries extensions.
+INTEREST = re.compile(r"^(vector|vchord|vectors|vectorscale|pg_search|timescaledb)[\w.-]*\.so$")
+for so in sorted(libdir.rglob("*.so")):
+    if so.is_symlink() or so.stat().st_size == 0 or not INTEREST.match(so.name):
+        continue
+    print(fingerprint(so), flush=True)

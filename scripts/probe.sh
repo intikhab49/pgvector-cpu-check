@@ -4,12 +4,15 @@
 #            amd64: Nehalem (SSE4.2, no AVX), SandyBridge (AVX), IvyBridge (AVX + F16C), Haswell (AVX2 + FMA, no AVX-512)
 #            arm64: cortex-a53, cortex-a72 (ARMv8.0, Raspberry Pi 3/4), neoverse-n1 (ARMv8.2 + FP16, Graviton2/Ampere)
 #            arm64 "native" is QEMU's default "max" CPU via binfmt, since the host is amd64.
-#   static:  counts AVX/AVX2/AVX-512/FMA/F16C instructions in the vector extensions' .so files (amd64 only).
-# Usage: scripts/probe.sh IMAGE ARCH OUTDIR      Writes OUTDIR/results.tsv and OUTDIR/info.tsv
+#   static:  scripts/fingerprint.py: instruction-set classes per function + CPU-dispatch evidence.
+#   crash:   QEMU writes the guest core on SIGILL; scripts/explain.sh opens it in gdb-multiarch.
+# Usage: scripts/probe.sh IMAGE ARCH OUTDIR
+# Writes OUTDIR/{results,info,fingerprint,explain}.tsv and OUTDIR/explain/*.txt
 set -euo pipefail
 image="$1" arch="$2" out="$3"
 here="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$out"
+out="$(cd "$out" && pwd)"
 case "$arch" in
   amd64) qemu=qemu-x86_64-static  cpus="Nehalem SandyBridge IvyBridge Haswell" ;;
   arm64) qemu=qemu-aarch64-static cpus="cortex-a53 cortex-a72 neoverse-n1" ;;
@@ -17,7 +20,7 @@ case "$arch" in
 esac
 
 if ! docker pull -q --platform "linux/$arch" "$image" >/dev/null 2>"$out/pull.err"; then
-  printf 'RESULT\t-\t-\tNO-IMAGE\t%s\n' "$(tail -n1 "$out/pull.err")" | cut -f2- > "$out/results.tsv"
+  printf -- '-\t-\tNO-IMAGE\t%s\n' "$(tail -n1 "$out/pull.err")" > "$out/results.tsv"
   exit 0
 fi
 image_arch="$(docker image inspect -f '{{.Architecture}}' "$image")"
@@ -46,29 +49,35 @@ EOF
 tag="cpuaudit-probe:$$"
 docker build -q --platform "linux/$arch" -t "$tag" "$ctx" >/dev/null
 
+mkdir -p "$out/cores" && chmod 777 "$out/cores"
 timeout 7200 docker run --rm --platform "linux/$arch" --user 0 --entrypoint "" -e CPUS="$cpus" \
+  --ulimit core=-1 -v "$out/cores:/cores" \
   "$tag" bash /usr/local/bin/cpuaudit-inner.sh > "$out/inner.log" 2>&1 || true
 grep '^RESULT' "$out/inner.log" | cut -f2- > "$out/results.tsv" || true
 grep '^INFO' "$out/inner.log" | cut -f2- >> "$out/info.tsv" || true
 [[ -s "$out/results.tsv" ]] || printf -- '-\t-\tERROR\t%s\n' "$(tail -n1 "$out/inner.log")" > "$out/results.tsv"
 
-if [[ "$arch" == amd64 ]]; then
-  pkglib="$(awk -F'\t' '$1=="pkglibdir"{print $2}' "$out/info.tsv")"
-  if [[ -n "$pkglib" ]]; then
-    cid="$(docker create "$tag")"
-    mkdir -p "$ctx/lib"
-    docker cp -L "$cid:$pkglib/." "$ctx/lib/" >/dev/null 2>&1 || true
-    docker rm "$cid" >/dev/null
-    : > "$out/static.tsv"
-    while IFS= read -r f; do
-      d="$(objdump -d --no-show-raw-insn "$f" 2>/dev/null)" || continue
-      printf '%s\tymm=%s\tzmm=%s\tfma=%s\tf16c=%s\n' "$(basename "$f")" \
-        "$(grep -c '%ymm' <<<"$d")" "$(grep -c '%zmm' <<<"$d")" \
-        "$(grep -cE '\svfn?m(add|sub)' <<<"$d")" "$(grep -cE '\svcvt(ph2ps|ps2ph)' <<<"$d")" >> "$out/static.tsv"
-    done < <(find "$ctx/lib" -type f \( -name 'vector.so' -o -name 'vectorscale*.so' -o -name 'vchord.so' \
-                -o -name 'vectors.so' -o -name 'pg_search*.so' \) 2>/dev/null)
-  fi
+# Static fingerprint of the extension libraries, and gdb on every core QEMU dumped.
+pkglib="$(awk -F'\t' '$1=="pkglibdir"{print $2}' "$out/info.tsv")"
+pg_bin="$(awk -F'\t' '$1=="pg_bin"{print $2}' "$out/info.tsv")"
+cid="$(docker create --platform "linux/$arch" "$tag")"
+if [[ -n "$pkglib" ]]; then
+  mkdir -p "$ctx/lib"
+  docker cp -L "$cid:$pkglib/." "$ctx/lib/" >/dev/null 2>&1 || true
+  python3 "$here/fingerprint.py" "$arch" "$ctx/lib" > "$out/fingerprint.tsv" 2>"$out/fingerprint.err" || true
 fi
+if compgen -G "$out/cores/*.core" >/dev/null && [[ -n "$pg_bin" ]]; then
+  mkdir -p "$ctx/rootfs" "$out/explain"
+  docker export "$cid" | tar -x -C "$ctx/rootfs" --exclude='dev/*' --exclude='proc/*' --exclude='sys/*' 2>/dev/null || true
+  : > "$out/explain.tsv"
+  for core in "$out"/cores/*.core; do
+    key="$(basename "$core" .core)"
+    bash "$here/explain.sh" "$ctx/rootfs" "$pg_bin" "$core" > "$out/explain/$key.txt" 2>&1 || true
+    printf '%s\t%s\t%s\n' "${key%@*}" "${key#*@}" "$(head -n1 "$out/explain/$key.txt")" >> "$out/explain.tsv"
+  done
+fi
+sudo rm -rf "$out/cores" 2>/dev/null || rm -rf "$out/cores"
+docker rm "$cid" >/dev/null
 docker rmi -f "$tag" >/dev/null 2>&1 || true
-rm -rf "$ctx"
+rm -rf "$ctx" 2>/dev/null || sudo rm -rf "$ctx"
 cat "$out/results.tsv"

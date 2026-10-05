@@ -55,6 +55,10 @@ jobs:
         uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
+      - name: Tools for the fingerprint and crash analysis
+        run: |
+          sudo apt-get -o Acquire::Retries=5 update -qq
+          sudo apt-get -o Acquire::Retries=5 install -y -qq --no-install-recommends gdb-multiarch binutils-aarch64-linux-gnu >/dev/null
       - name: Probe
         env:
           NAME: ${{ matrix.name }}

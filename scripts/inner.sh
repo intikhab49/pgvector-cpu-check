@@ -49,6 +49,7 @@ fi
 
 # ---------- phase 2: non-root ----------
 work=/tmp/cpuaudit; mkdir -p "$work"; cd "$work" || exit 1
+ulimit -c unlimited 2>/dev/null || true
 data="$work/data" sock="$work" log="$work/server.log"
 export PGHOST="$sock" PGUSER=postgres PGDATABASE=postgres
 psql_bin="$PG_BIN/psql"
@@ -125,7 +126,19 @@ CREATE INDEX docs_bm25 ON docs USING bm25 (id, body) WITH (key_field = 'id');
 SELECT count(*) AS hits FROM docs WHERE body @@@ 'word7';
 SELECT 'cpuaudit-ok';"
 
-SUITES="server pgvector vectorscale vchord pgvecto_rs pg_search"
+SUITE_EXT[timescaledb]=timescaledb
+SUITE_PRELOAD[timescaledb]=timescaledb
+SUITE_SQL[timescaledb]="CREATE EXTENSION IF NOT EXISTS timescaledb;
+CREATE TABLE m (t timestamptz NOT NULL, dev int, v double precision);
+SELECT count(*) FROM create_hypertable('m', 't', chunk_time_interval => interval '1 day');
+INSERT INTO m SELECT now() - g * interval '1 minute', g % 10, sin(g) FROM generate_series(1, 20000) g;
+SELECT count(*) AS buckets FROM (SELECT time_bucket('1 hour', t), dev, avg(v) FROM m GROUP BY 1, 2) s;
+ALTER TABLE m SET (timescaledb.compress, timescaledb.compress_segmentby = 'dev');
+SELECT count(compress_chunk(c)) AS compressed FROM show_chunks('m') c;
+SELECT count(*) AS rows_after FROM m;
+SELECT 'cpuaudit-ok';"
+
+SUITES="server pgvector vectorscale vchord pgvecto_rs pg_search timescaledb"
 
 server_pid=""
 start_server() { # start_server CPU PRELOAD
@@ -134,7 +147,8 @@ start_server() { # start_server CPU PRELOAD
   rm -f "$data/postmaster.pid"
   : > "$log"
   "${runner[@]}" "$PG_BIN/postgres" -D "$data" -k "$sock" -c listen_addresses='' \
-    -c shared_preload_libraries="$preload" -c max_worker_processes=16 -c fsync=off \
+    -c shared_preload_libraries="$preload" -c max_worker_processes=16 -c fsync=off -c shared_buffers=16MB \
+    -c timescaledb.telemetry_level=off \
     -c log_min_messages=log >>"$log" 2>&1 &
   server_pid=$!
   for i in $(seq 1 240); do
@@ -170,11 +184,22 @@ run_suite() { # run_suite SUITE CPU -> prints status
      && grep -q 'cpuaudit-ok' "$work/out.txt"; then
     printf 'PASS\t%s' "$(grep -E '^[0-9{]' "$work/out.txt" | tr '\n' ' ' | cut -c1-160)"
   else
-    sleep 1
+    sleep 2
     printf 'FAIL\t%s' "$(crash_detail)"
+    save_core "$s" "$cpu"
   fi
   "$psql_bin" -qc "DROP DATABASE IF EXISTS $db" >/dev/null 2>&1
   stop_server
+  rm -f "$data"/qemu_*.core "$work"/qemu_*.core
+}
+# QEMU user mode writes the guest's own ELF core (qemu_<prog>_<time>_<pid>.core) into the crashing
+# process's working directory; the host side opens it in gdb to name the faulting instruction.
+save_core() {
+  local core
+  [[ -d /cores && -w /cores ]] || return 0
+  core="$(ls -t "$data"/qemu_*.core "$work"/qemu_*.core 2>/dev/null | head -n1)"
+  [[ -n "$core" ]] && mv "$core" "/cores/$1@$2.core" 2>/dev/null
+  return 0
 }
 
 # Which extensions does the image ship?

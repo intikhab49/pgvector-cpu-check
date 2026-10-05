@@ -27,7 +27,8 @@ for d in sorted(root.iterdir()):
     meta = json.loads(meta_file.read_text())
     meta["results"] = read_tsv(d / "results.tsv")
     meta["info"] = {r[0]: r[1] if len(r) > 1 else "" for r in read_tsv(d / "info.tsv")}
-    meta["static"] = read_tsv(d / "static.tsv")
+    meta["fingerprint"] = read_tsv(d / "fingerprint.tsv")
+    meta["explain"] = {(r[0], r[1]): r[2:] for r in read_tsv(d / "explain.tsv") if len(r) >= 3}
     jobs.append(meta)
 
 print("# Vector Postgres images on older CPUs\n")
@@ -52,7 +53,7 @@ for arch in ("amd64", "arm64"):
             suite, cpu, status, detail = r[:4]
             rows.setdefault(suite, {})[cpu] = (status, detail)
             if status == "FAIL":
-                failures.append((j["name"], arch, suite, cpu, detail))
+                failures.append((j["name"], arch, suite, cpu, detail, j["explain"].get((suite, cpu))))
         if not rows:
             print(f"| {j['name']} | (no output) |" + " |" * len(cols))
             continue
@@ -68,15 +69,19 @@ for arch in ("amd64", "arm64"):
 print("## Failures\n")
 if not failures:
     print("None.\n")
-for name, arch, suite, cpu, detail in failures:
-    print(f"- **{name}** ({arch}) `{suite}` on **{cpu}**: {detail}")
+for name, arch, suite, cpu, detail, why in failures:
+    line = f"- **{name}** ({arch}) `{suite}` on **{cpu}**: {detail}"
+    if why:
+        line += f"\n  - faulting instruction: `{why[0]}` in {why[1] if len(why) > 1 else '?'}"
+    print(line)
 print()
 
-print("## Static scan (amd64 extension libraries: instruction counts)\n")
-print("Counts show which instruction sets a library contains. Code behind a runtime CPU check is safe; the dynamic table decides.\n")
-for j in sorted([j for j in jobs if j["arch"] == "amd64"], key=lambda j: j["name"]):
-    if j["static"]:
-        print(f"- **{j['name']}**: " + "; ".join(" ".join(r) for r in j["static"]))
+print("## Static fingerprint of the extension libraries\n")
+print("Per library: functions that use each instruction class, CPU-dispatch evidence, compiler, verdict.")
+print("Code behind a runtime CPU check is safe; the dynamic table decides.\n")
+for j in sorted(jobs, key=lambda j: (j["name"], j["arch"])):
+    for r in j["fingerprint"]:
+        print(f"- **{j['name']}** ({j['arch']}) " + " · ".join(r))
 print()
 
 print("## Images and hosts\n")
