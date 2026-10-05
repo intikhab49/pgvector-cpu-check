@@ -197,7 +197,7 @@ run_suite() { # run_suite SUITE CPU -> prints status
   fi
   "$psql_bin" -qc "DROP DATABASE IF EXISTS $db" >/dev/null 2>&1
   stop_server
-  rm -f "$data"/qemu_*.core "$work"/qemu_*.core
+  rm -f "$data"/qemu_*.core "$work"/qemu_*.core /cores/core.native.* 2>/dev/null
 }
 # Server log tail and psql output of a failed suite go to stderr (the job's inner.log) for diagnosis.
 dump_log() {
@@ -209,8 +209,10 @@ dump_log() {
 save_core() {
   local core
   [[ -d /cores && -w /cores ]] || return 0
-  # native crashes: the host's kernel.core_pattern points into /cores (core.native.<pid>)
-  core="$(ls -t "$data"/qemu_*.core "$work"/qemu_*.core /cores/core.native.* 2>/dev/null | head -n1)"
+  # Native crashes: the host's kernel.core_pattern writes /cores/core.native.<pid>. Emulated crashes:
+  # take only QEMU's guest core; the kernel also dumps QEMU's own (x86) process, which is useless here.
+  if [[ "$2" == native ]]; then core="$(ls -t /cores/core.native.* 2>/dev/null | head -n1)"
+  else core="$(ls -t "$data"/qemu_*.core "$work"/qemu_*.core 2>/dev/null | head -n1)"; fi
   [[ -n "$core" ]] && mv "$core" "/cores/$1@$2.core" 2>/dev/null
   return 0
 }
