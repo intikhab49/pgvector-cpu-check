@@ -73,7 +73,7 @@ if compgen -G "$out/cores/*.core" >/dev/null && [[ -n "$pg_bin" ]]; then
   : > "$out/explain.tsv"
   for core in "$out"/cores/*.core; do
     key="$(basename "$core" .core)"
-    bash "$here/explain.sh" "$arch" "$ctx/rootfs" "$pg_bin" "$core" > "$out/explain/$key.txt" 2>&1 || true
+    PKGLIB="$pkglib" bash "$here/explain.sh" "$arch" "$ctx/rootfs" "$pg_bin" "$core" > "$out/explain/$key.txt" 2>&1 || true
     printf '%s\t%s\t%s\n' "${key%@*}" "${key#*@}" "$(head -n1 "$out/explain/$key.txt")" >> "$out/explain.tsv"
   done
 fi

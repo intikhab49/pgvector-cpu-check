@@ -15,7 +15,7 @@ pc="$(grep -m1 -oE '^#0 +0x[0-9a-f]+' <<<"$raw" | grep -oE '0x[0-9a-f]+' || grep
 summary=""
 map="$(mktemp)"
 # QEMU guest cores lack the file-mapping note gdb needs; recover the link_map from the core instead.
-[[ -n "$pc" ]] && summary="$(python3 "$here/corelibs.py" "$arch" "$core" "$rootfs" "$pc" "$pg_bin/postgres" 2>"$map" | tail -n1)"
+[[ -n "$pc" ]] && summary="$(python3 "$here/corelibs.py" "$arch" "$core" "$rootfs" "$pc" "$pg_bin/postgres" "${PKGLIB:-}" 2>"$map" | tail -n1)"
 if [[ -z "$summary" || "$summary" == '?'* ]]; then
   insn="$(grep -m1 -E '^=> 0x' <<<"$raw" | sed -E 's/^=> 0x[0-9a-f]+( <[^>]*>)?:\s*//')"
   sym="$(grep -m1 -E ' in section ' <<<"$raw" | sed -E "s# in section [^ ]+( of )?# in #; s#$rootfs##")"

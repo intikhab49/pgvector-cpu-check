@@ -8,10 +8,11 @@ For every "/....so" path string in the core we look for pointers to it (l_name) 
 l_ld - l_addr equals that library's real .dynamic address (read from the file in ROOTFS). That check makes
 false positives practically impossible. The instruction is then disassembled from the library file itself.
 
-Usage: scripts/corelibs.py ARCH CORE ROOTFS PC [EXECUTABLE]
+Usage: scripts/corelibs.py ARCH CORE ROOTFS PC [EXECUTABLE [PKGLIBDIR]]
 Prints one line: <instruction>\t<function+0xoff> in <library> (offset 0x...)"""
 import bisect
 import functools
+import pathlib
 import re
 import struct
 import subprocess
@@ -98,6 +99,38 @@ for p, (a, size) in sorted(libs.items(), key=lambda kv: kv[1][0]):
     print(f"MAP	0x{a:x}-0x{a + size:x}	{p}", file=sys.stderr)
 print(f"MAP	core segments: " + " ".join(f"0x{v:x}+0x{sz:x}" for v, _o, sz in segs if v <= pc + (1 << 24) and pc - (1 << 24) <= v + sz), file=sys.stderr)
 hit = next(((p, a) for p, (a, size) in libs.items() if a <= pc < a + size), None)
+
+# Fallback for libraries whose link_map entry was cut off (QEMU 7.2 truncates large cores, and a dlopen()ed
+# extension's entry is allocated late): match each candidate library's PT_LOAD layout, page by page, against
+# the core's segment starts. Only the right file at the right base fits all of its segments.
+if not hit:
+    starts = set()
+    for i in range(phnum):
+        p_type, _f, _o, p_vaddr, _p, _fs, p_memsz = struct.unpack_from("<IIQQQQQ", data, phoff + i * phentsize)
+        if p_type == 1:
+            starts.add(p_vaddr)
+    pc_seg = max((s for s in starts if s <= pc), default=None)
+    pkglib = sys.argv[6] if len(sys.argv) > 6 else ""
+    candidates = []
+    for d in filter(None, [pkglib, "/usr/lib", "/usr/local/lib", "/lib", "/usr/lib/aarch64-linux-gnu", "/usr/lib/x86_64-linux-gnu"]):
+        root = pathlib.Path(rootfs + d)
+        if root.is_dir():
+            candidates += [p for p in root.rglob("*.so*") if p.is_file() and not p.is_symlink()]
+    matches = []
+    for lib_path in candidates:
+        out = subprocess.run(["readelf", "-lW", str(lib_path)], capture_output=True, text=True).stdout
+        loads = [(int(v, 16), fl) for v, fl in re.findall(r"^\s*LOAD\s+0x[0-9a-f]+\s+(0x[0-9a-f]+)\s+0x[0-9a-f]+\s+0x[0-9a-f]+\s+0x[0-9a-f]+\s+([RWE ]+?)\s+0x", out, re.M)]
+        exec_loads = [v for v, fl in loads if "E" in fl]
+        if not exec_loads or pc_seg is None:
+            continue
+        base = pc_seg - (exec_loads[0] & ~0xfff)
+        if base % 4096 == 0 and all(base + (v & ~0xfff) in starts for v, _ in loads):
+            matches.append((str(lib_path)[len(rootfs):], base))
+    if len(matches) == 1:
+        hit = matches[0]
+    elif matches:
+        print(f"?\tPC 0x{pc:x} matches several libraries by layout: {', '.join(m[0] for m in matches)}")
+        sys.exit(0)
 if not hit:
     print(f"?\tPC 0x{pc:x} not in any of {len(libs)} recovered libraries or the executable")
     sys.exit(0)
