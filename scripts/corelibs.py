@@ -94,6 +94,9 @@ if exe:
                     libs[exe] = (auxv[9] - int(e_entry.group(1), 16), dynamic_vaddr_and_end(rootfs + exe)[1])
             pos = desc + ((descsz + 3) & ~3)
 
+for p, (a, size) in sorted(libs.items(), key=lambda kv: kv[1][0]):
+    print(f"MAP	0x{a:x}-0x{a + size:x}	{p}", file=sys.stderr)
+print(f"MAP	core segments: " + " ".join(f"0x{v:x}+0x{sz:x}" for v, _o, sz in segs if v <= pc + (1 << 24) and pc - (1 << 24) <= v + sz), file=sys.stderr)
 hit = next(((p, a) for p, (a, size) in libs.items() if a <= pc < a + size), None)
 if not hit:
     print(f"?\tPC 0x{pc:x} not in any of {len(libs)} recovered libraries or the executable")
