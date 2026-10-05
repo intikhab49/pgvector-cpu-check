@@ -40,6 +40,19 @@ def read(addr, n):
     return None
 
 
+def read_parts(addr, n):
+    """Bytes of [addr, addr+n) that the core really holds, as (offset_in_range, bytes) pieces: the range may
+    span several QEMU segments, and a truncated core simply lacks the tail."""
+    parts = []
+    for v, o, sz in segs:
+        lo, hi = max(addr, v), min(addr + n, v + sz)
+        if lo < hi:
+            chunk = data[o + lo - v:o + hi - v]  # shorter than hi-lo if the file is truncated here
+            if chunk:
+                parts.append((lo - addr, chunk))
+    return parts
+
+
 @functools.lru_cache(maxsize=None)
 def dynamic_vaddr_and_end(path):
     out = subprocess.run(["readelf", "-lW", path], capture_output=True, text=True).stdout
@@ -139,14 +152,10 @@ if not hit:
         for o, v, fs, _m, fl in loads:
             if "W" not in fl or not fs:
                 continue
-            for page in range(0, fs, 4096):
-                n = min(4096, fs - page)
-                mem = read(base + v + page, n)
-                if mem is None:
-                    continue
-                ref = blob[o + page:o + page + n]
-                same += sum(1 for a, b in zip(mem, ref) if a == b)
-                total += n
+            for rel, chunk in read_parts(base + v, fs):
+                ref = blob[o + rel:o + rel + len(chunk)]
+                same += sum(1 for a, b in zip(chunk, ref) if a == b)
+                total += len(ref)
         score = same / total if total >= 256 else 0.0
         print(f"LAYOUT\t{str(lib_path)[len(rootfs):]}\tbase 0x{base:x}\tdata match {same}/{total} = {score:.2f}", file=sys.stderr)
         matches.append((score, str(lib_path)[len(rootfs):], base))
