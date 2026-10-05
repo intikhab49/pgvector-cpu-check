@@ -177,7 +177,7 @@ crash_detail() {
 
 run_suite() { # run_suite SUITE CPU -> prints status
   local s="$1" cpu="$2" db
-  db="t_${s}_$(echo "$cpu" | tr -c 'a-zA-Z0-9\n' '_')"
+  db="t_${s}_$(echo "$cpu" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9\n' '_')"   # unquoted identifiers fold to lower case
   : > "$work/out.txt"
   if ! start_server "$cpu" "${SUITE_PRELOAD[$s]:-}"; then
     printf 'FAIL\tserver did not start: %s' "$(crash_detail || tail -n1 "$log")"; stop_server; return
