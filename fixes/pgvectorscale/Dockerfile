@@ -21,7 +21,6 @@ RUN set -eux; \
         libclang-dev clang "postgresql-server-dev-$pg"; \
     rm -rf /var/lib/apt/lists/*; \
     echo "$pg" > /tmp/pg_major
-COPY load-on-any-x86-cpu.patch /tmp/
 # cargo pgrx init runs initdb, which refuses to run as root
 USER postgres
 ENV CARGO_HOME=/home/postgres/.cargo RUSTUP_HOME=/home/postgres/.rustup PATH=/home/postgres/.cargo/bin:$PATH
@@ -29,10 +28,15 @@ RUN set -eux; \
     pg="$(cat /tmp/pg_major)"; \
     curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal; \
     cargo install cargo-pgrx --version "$PGRX_VERSION" --locked; \
-    cargo pgrx init "--pg$pg" "/usr/lib/postgresql/$pg/bin/pg_config"; \
+    cargo pgrx init "--pg$pg" "/usr/lib/postgresql/$pg/bin/pg_config"
+COPY *.patch /tmp/
+# none = the unpatched source with the same toolchain, for speed comparisons
+ARG PATCH=load-on-any-x86-cpu.patch
+RUN set -eux; \
+    pg="$(cat /tmp/pg_major)"; \
     git clone -q --depth 1 --branch "$PGVECTORSCALE_VERSION" https://github.com/timescale/pgvectorscale /tmp/src; \
     cd /tmp/src; \
-    git apply /tmp/load-on-any-x86-cpu.patch; \
+    if [ "$PATCH" != none ]; then git apply "/tmp/$PATCH"; fi; \
     cd pgvectorscale; \
     cargo pgrx package --pg-config "/usr/lib/postgresql/$pg/bin/pg_config"; \
     so="$(find /tmp/src/target/release -name "vectorscale-$PGVECTORSCALE_VERSION.so" | head -n1)"; \
