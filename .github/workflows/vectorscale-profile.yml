@@ -1,0 +1,91 @@
+name: vectorscale-profile
+
+# Temporary: where does the fixed pgvectorscale spend the extra query time? Profiles the original and
+# the fixed image under the same DiskANN query workload with perf, and times more query rounds.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - fixes/pgvectorscale/**
+      - .github/workflows/vectorscale-profile.yml
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      BASE: timescale/timescaledb-ha:pg17.11-ts2.30.2
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: perf
+        run: |
+          sudo apt-get -o Acquire::Retries=5 update -qq
+          sudo apt-get -o Acquire::Retries=5 install -y -qq --no-install-recommends "linux-tools-$(uname -r)" linux-tools-common >/dev/null
+          sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0
+          grep -m1 'model name' /proc/cpuinfo
+      - name: Build the fixed image
+        run: docker buildx build --load -t local/fixed --build-arg BASE="$BASE" fixes/pgvectorscale
+      - name: Start both, same data, same index
+        run: |
+          for v in orig fixed; do
+            img="$BASE"; [ "$v" = fixed ] && img=local/fixed
+            docker run -d --name "$v" --entrypoint "" --user postgres --shm-size=1g "$img" sh -c '
+              . /.image_config; export PATH="/usr/lib/postgresql/$PG_MAJOR/bin:$PATH"
+              initdb -D /tmp/d -U postgres --auth=trust >/dev/null
+              exec postgres -D /tmp/d -k /tmp -c listen_addresses= -c shared_buffers=512MB -c maintenance_work_mem=1GB \
+                -c max_parallel_maintenance_workers=0 -c jit=off'
+          done
+          sleep 5
+          for v in orig fixed; do
+            docker exec "$v" sh -c '. /.image_config; export PATH="/usr/lib/postgresql/$PG_MAJOR/bin:$PATH"; psql -h /tmp -U postgres -qAt \
+              -c "CREATE EXTENSION vectorscale CASCADE" -c "SELECT setseed(0.42)" \
+              -c "CREATE TABLE items AS SELECT g AS id, (SELECT array_agg(random()::real) FROM generate_series(1, 768) i WHERE g > 0)::vector(768) AS e FROM generate_series(1, 20000) g" \
+              -c "CREATE TABLE qs AS SELECT e AS q FROM items WHERE id % 40 = 0" \
+              -c "CREATE INDEX ON items USING diskann (e vector_cosine_ops)" -c "SELECT count(*) FROM items"'
+          done
+      - name: Query time, 9 alternating rounds
+        run: |
+          q='SET enable_seqscan = off; \timing on
+          SELECT count(*) FROM qs, LATERAL (SELECT id FROM items ORDER BY e <=> qs.q LIMIT 10) n;'
+          for r in 1 2 3 4 5 6 7 8 9; do
+            for v in orig fixed; do
+              t=$(docker exec "$v" sh -c ". /.image_config; /usr/lib/postgresql/\$PG_MAJOR/bin/psql -h /tmp -U postgres -qAt" <<<"$q" | sed -n 's/^Time: \([0-9.]*\) ms.*/\1/p')
+              printf '%s\t%s\t%s\n' "$v" "$r" "$t" | tee -a times.tsv
+            done
+          done
+          for v in orig fixed; do
+            printf '%s median ms: ' "$v"; awk -v v="$v" '$1==v{print $3}' times.tsv | sort -n | awk '{a[NR]=$1} END{print a[int((NR+1)/2)]}'
+          done | tee medians.txt
+      - name: Profile the query workload
+        run: |
+          q='SET enable_seqscan = off;
+          SELECT count(*) FROM qs, LATERAL (SELECT id FROM items ORDER BY e <=> qs.q LIMIT 10) n;
+          SELECT count(*) FROM qs, LATERAL (SELECT id FROM items ORDER BY e <=> qs.q LIMIT 10) n;
+          SELECT count(*) FROM qs, LATERAL (SELECT id FROM items ORDER BY e <=> qs.q LIMIT 10) n;'
+          for v in orig fixed; do
+            pids=$(docker top "$v" -eo pid,args | awk '/postgres/ {print $1}' | paste -sd, -)
+            sudo perf record -F 4999 -g -o "perf-$v.data" -a -- \
+              docker exec -i "$v" sh -c ". /.image_config; /usr/lib/postgresql/\$PG_MAJOR/bin/psql -h /tmp -U postgres -qAt" <<<"$q"
+            sudo perf report -i "perf-$v.data" --no-children --comm postgres --sort dso,symbol --percent-limit 0.4 --stdio 2>/dev/null \
+              | grep -v '^$' | grep -v '^#' | grep '%' | head -45 > "top-$v.txt"
+            echo "=== $v"; cat "top-$v.txt"
+          done
+      - name: Disassembly of the fixed hot kernels
+        run: |
+          docker cp fixed:/usr/lib/postgresql/17/lib/vectorscale-0.9.1.so fixed.so
+          docker cp orig:/usr/lib/postgresql/17/lib/vectorscale-0.9.1.so orig.so
+          for v in orig fixed; do
+            echo "=== $v: functions with xor/distance in the name, and their size"
+            nm -C --size-sort -S "$v.so" | grep -iE 'distance|xor|hamming|sbq' | tail -25
+          done
+      - name: Summary
+        if: always()
+        run: |
+          { echo '## times'; echo '```'; cat medians.txt times.tsv 2>/dev/null; echo '```'
+            for v in orig fixed; do echo "## top symbols: $v"; echo '```'; cat "top-$v.txt" 2>/dev/null; echo '```'; done
+          } >> "$GITHUB_STEP_SUMMARY"
