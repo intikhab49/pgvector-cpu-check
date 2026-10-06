@@ -1,0 +1,19 @@
+name: release smoke
+
+# The published tag, referenced exactly as a user would (not ./).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  v1:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: intikhab49/pgvector-cpu-check@v1
+        with:
+          image: pgvector/pgvector:pg17-trixie
+          platforms: amd64
