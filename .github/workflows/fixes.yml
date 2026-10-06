@@ -1,0 +1,102 @@
+name: fixes
+
+# Builds every fix in fixes/ and runs it on every emulated CPU model, next to the unfixed image on
+# the same runner. The job fails if the fixed image still crashes anywhere. On amd64 it also times
+# the unfixed and fixed images natively, alternating, so a fix can't quietly cost speed.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - fixes/**
+      - scripts/**
+      - .github/workflows/fixes.yml
+
+permissions:
+  contents: read
+
+jobs:
+  fix:
+    name: ${{ matrix.fix }} (${{ matrix.arch }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 170
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { fix: tecnativa, arch: amd64, base: "tecnativa/postgres-autoconf:18-alpine", bench: hnsw }
+          - { fix: tecnativa, arch: arm64, base: "tecnativa/postgres-autoconf:18-alpine" }
+          - { fix: bitnami, arch: amd64, base: "bitnami/postgresql:latest" }
+          - { fix: bitnami, arch: arm64, base: "bitnami/postgresql:latest" }
+          - { fix: pgvectorscale, arch: amd64, base: "timescale/timescaledb-ha:pg17.11-ts2.30.2", bench: diskann }
+    env:
+      FIX: ${{ matrix.fix }}
+      ARCH: ${{ matrix.arch }}
+      BASE: ${{ matrix.base }}
+      BENCH: ${{ matrix.bench }}
+      # Tecnativa/docker-postgres-autoconf commit the patch applies to
+      TECNATIVA_REF: 0e87caf7ee46a2378999f2194a1e9a072b27f9ed
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - name: Tools
+        run: |
+          sudo apt-get -o Acquire::Retries=5 update -qq
+          sudo apt-get -o Acquire::Retries=5 install -y -qq --no-install-recommends gdb-multiarch binutils-aarch64-linux-gnu >/dev/null
+          sudo sysctl -w kernel.core_pattern=/cores/core.native.%p
+      - name: Build the fixed image
+        run: |
+          if [ "$FIX" = tecnativa ]; then
+            # their Dockerfile at a fixed commit, plus the one-line patch
+            git clone -q https://github.com/Tecnativa/docker-postgres-autoconf build-ctx
+            git -C build-ctx checkout -q "$TECNATIVA_REF"
+            git -C build-ctx apply "$PWD/fixes/tecnativa/Dockerfile.patch"
+            git -C build-ctx diff
+            args=(--build-arg "BASE_TAG=${BASE##*:}" build-ctx)
+          else
+            args=(--build-arg "BASE=$BASE" "fixes/$FIX")
+          fi
+          docker buildx build --platform "linux/$ARCH" --load -t "local/fixed-$FIX" "${args[@]}"
+      - name: Fixed image on every CPU model
+        run: LOCAL_IMAGE=1 bash scripts/probe.sh "local/fixed-$FIX" "$ARCH" out/fixed
+      - name: Unfixed image on every CPU model
+        run: bash scripts/probe.sh "$BASE" "$ARCH" out/unfixed
+      - name: Speed (natively; same runner, alternating, 5 rounds)
+        if: matrix.bench != ''
+        run: |
+          grep -m1 'model name' /proc/cpuinfo | tee out/bench-host.txt
+          for round in 1 2 3 4 5; do
+            printf 'unfixed\t%s\t%s\n' "$round" "$(bash scripts/bench.sh "$BASE" "$BENCH")" | tee -a out/bench.tsv
+            printf 'fixed\t%s\t%s\n' "$round" "$(bash scripts/bench.sh "local/fixed-$FIX" "$BENCH")" | tee -a out/bench.tsv
+          done
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## $FIX ($ARCH)"
+            for v in unfixed fixed; do echo "### $v"; echo '```'; cat "out/$v/results.tsv" "out/$v/explain.tsv" 2>/dev/null || true; echo '```'; done
+            if [ -f out/bench.tsv ]; then
+              echo "### speed ($BENCH build_ms, query_ms)"; echo '```'; cat out/bench-host.txt out/bench.tsv; echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: The fixed image must not crash on any CPU model
+        run: |
+          # same rule as the action: a failure on an emulated CPU, or a native failure by signal
+          crashes="$(awk -F'\t' '$3=="FAIL" && ($2!="native" || $4 ~ /signal/)' out/fixed/results.tsv)"
+          if [ -n "$crashes" ]; then echo "$crashes"; echo "::error::the fixed $FIX image still fails"; exit 1; fi
+          awk -F'\t' '$3!="PASS" && $3!="SKIP" && $3!="N/A"' out/fixed/results.tsv | grep . && { echo "::error::unexpected result"; exit 1; } || true
+          echo "fixed $FIX ($ARCH): no crash on any CPU model"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: fix-${{ matrix.fix }}-${{ matrix.arch }}
+          path: |
+            out/*/results.tsv
+            out/*/info.tsv
+            out/*/explain.tsv
+            out/*/inner.log
+            out/bench*.txt
+            out/bench.tsv
