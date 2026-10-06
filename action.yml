@@ -1,5 +1,5 @@
 name: pgvector CPU check
-description: Find the CPUs a PostgreSQL/pgvector Docker image crashes on (Illegal instruction, SIGILL) and the instruction that does it
+description: Find out which CPU crashes your Postgres image before your users do. Runs it on 7 CPUs and names the instruction.
 author: intikhab49
 branding:
   icon: cpu
