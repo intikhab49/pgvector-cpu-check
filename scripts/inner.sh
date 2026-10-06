@@ -132,6 +132,7 @@ SELECT array_agg(id) AS knn FROM (SELECT id FROM items2 ORDER BY e <-> (SELECT e
 SELECT 'cpuaudit-ok';"
 
 SUITE_EXT[pg_search]=pg_search
+SUITE_PRELOAD[pg_search]=pg_search
 SUITE_SQL[pg_search]="CREATE EXTENSION IF NOT EXISTS pg_search CASCADE;
 CREATE TABLE docs AS SELECT g AS id, 'word' || (g % 50) || ' text number ' || g AS body FROM generate_series(1, 3000) g;
 CREATE INDEX docs_bm25 ON docs USING bm25 (id, body) WITH (key_field = 'id');

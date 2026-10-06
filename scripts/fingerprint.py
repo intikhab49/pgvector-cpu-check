@@ -23,7 +23,8 @@ X86 = {
     "avx": re.compile(r"%ymm|\bv(add|sub|mul|div|max|min|and|or|xor|blend|shuf|unpck|movap|movup|broadcastss|sqrt|cvt)\w*\s"),
     "fma": re.compile(r"\bvfn?m(add|sub)"),
     "f16c": re.compile(r"\bvcvt(ph2ps|ps2ph)\b"),
-    "bmi": re.compile(r"\b(tzcnt|lzcnt|andn|bextr|blsi|blsr|blsmsk|pdep|pext|shlx|shrx|sarx|rorx)\b"),
+    # tzcnt/lzcnt are left out: CPUs without BMI/ABM decode them as rep-bsf/bsr instead of faulting.
+    "bmi": re.compile(r"\b(andn|bextr|blsi|blsr|blsmsk|pdep|pext|shlx|shrx|sarx|rorx)\b"),
     "popcnt": re.compile(r"\bpopcnt\b"),
     "sse4": re.compile(r"\b(pminsd|pmaxsd|pmulld|ptest|pblendvb|blendvps|roundps|roundss|pcmpeqq|pextr[bdq]|pinsr[bdq]|crc32[bwlq]?|pcmpgtq|pcmp[ei]str[im])\b"),
 }
@@ -107,8 +108,17 @@ def fingerprint(path):
     # Calibrated against the dynamic results: with dispatch present, the deliberately multiversioned kernels
     # are named for their target (pgvector BitHammingDistanceAvx512Popcount, VectorChord simd::...::v4::...).
     # Set those aside; a newer instruction in ANY remaining function means a global -march/target-cpu.
+    # In stripped libraries a dispatched static kernel is attributed to the nearest exported symbol, so name
+    # exclusion alone is not enough: with dispatch present, a class must also cover >= 5% of the regions to
+    # count as a global flag. Without any dispatch machinery, a single use sets the floor. libgcc's
+    # outline-atomics helpers (LSE behind a runtime check) collapse into 1-2 unnamed regions when stripped.
     unguarded = {f: c for f, c in funcs.items() if not (evidence and DISPATCH_NAME.search(f))}
-    floor = next(((cls, label) for cls, label in FLOOR if any(cls in c for c in unguarded.values())), None)
+    def is_floor(cls):
+        n = sum(1 for c in unguarded.values() if cls in c)
+        if cls == "lse" and n <= 2:
+            return False
+        return n >= 1 if not evidence else n >= max(2, 0.05 * len(funcs))
+    floor = next(((cls, label) for cls, label in FLOOR if is_floor(cls)), None)
     if floor:
         sample = sorted(f for f, c in unguarded.items() if floor[0] in c)
         verdict = (f"needs {floor[1]}: {floor[0]} in {len(sample)} unguarded of {len(funcs)} functions, "

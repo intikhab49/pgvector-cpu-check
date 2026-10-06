@@ -80,8 +80,11 @@ print("## Static fingerprint of the extension libraries\n")
 print("Per library: functions that use each instruction class, CPU-dispatch evidence, compiler, verdict.")
 print("Code behind a runtime CPU check is safe; the dynamic table decides.\n")
 for j in sorted(jobs, key=lambda j: (j["name"], j["arch"])):
-    for r in j["fingerprint"]:
+    flagged = [r for r in j["fingerprint"] if not r[-1].startswith("verdict=baseline")]
+    for r in flagged:
         print(f"- **{j['name']}** ({j['arch']}) " + " · ".join(r))
+    if j["fingerprint"] and not flagged:
+        print(f"- **{j['name']}** ({j['arch']}): all {len(j['fingerprint'])} extension libraries baseline")
 print()
 
 print("## Images and hosts\n")

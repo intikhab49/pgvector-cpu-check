@@ -19,7 +19,12 @@ case "$arch" in
   *) echo "unsupported arch $arch" >&2; exit 2 ;;
 esac
 
-if ! docker pull -q --platform "linux/$arch" "$image" >/dev/null 2>"$out/pull.err"; then
+pulled=""
+for attempt in 1 2 3 4; do   # registries rate-limit bursts of parallel pulls (ghcr.io "toomanyrequests")
+  docker pull -q --platform "linux/$arch" "$image" >/dev/null 2>"$out/pull.err" && { pulled=1; break; }
+  sleep $((attempt * 20))
+done
+if [[ -z "$pulled" ]]; then
   printf -- '-\t-\tNO-IMAGE\t%s\n' "$(tail -n1 "$out/pull.err")" > "$out/results.tsv"
   exit 0
 fi
