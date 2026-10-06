@@ -54,6 +54,14 @@ pgvectorscale has a guard meant to turn a missing AVX2/FMA into a clean error
 so the check is removed: the panic message is absent from the released `vectorscale-0.9.1.so`, and the server
 crashes instead.
 
+### Reported upstream
+
+- Tecnativa `postgres-autoconf`: [pull request #42](https://github.com/Tecnativa/docker-postgres-autoconf/pull/42), a one-line fix (`make OPTFLAGS=""`).
+  With it the image runs on every CPU model above, and pgvector is built with `-O2` again: HNSW index builds
+  **8 to 10 times faster** and queries **3.8 times faster** on the same runner
+  ([evidence run](https://github.com/intikhab49/pgvector-cpu-check/actions/runs/37425193526)).
+- pgvectorscale: [issue #288](https://github.com/timescale/pgvectorscale/issues/288), the compiled-out CPU check.
+
 ## Check your own image in CI
 
 ```yaml
