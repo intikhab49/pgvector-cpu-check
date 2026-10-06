@@ -1,6 +1,7 @@
 ---
 title: "pgvector \"Illegal instruction\" (SIGILL): which PostgreSQL Docker images crash on which CPUs"
 description: "An audit of 13 PostgreSQL vector images (pgvector, pgvectorscale, VectorChord, pgvecto.rs, ParadeDB) on emulated Nehalem, Sandy Bridge, Ivy Bridge, Haswell, Raspberry Pi and Graviton2 CPUs: which crash with signal 4, the exact faulting instruction, and how to fix the build."
+image: /assets/banner.png
 ---
 
 <img class="banner" src="{{ '/assets/banner.png' | relative_url }}" alt="Your Postgres image works here. On older CPUs it crashes: pgvector-cpu-check replays the crash on 7 CPU models and names the faulting instruction">
