@@ -1,25 +1,24 @@
-<p align="center">
-  <img src="assets/banner.png" width="100%" alt="Your Postgres image works here. On older CPUs it crashes. pgvector-cpu-check replays the crash on 7 CPU models and names the faulting instruction, then the build fix.">
-</p>
+<div align="center">
 
-<p align="center">
-  <a href="https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/action-test.yml"><img alt="action test" src="https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/action-test.yml/badge.svg"></a>
-  <a href="https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/audit.yml"><img alt="weekly audit" src="https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/audit.yml/badge.svg"></a>
-  <a href="https://github.com/intikhab49/pgvector-cpu-check/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/intikhab49/pgvector-cpu-check?color=e0a526&label=action"></a>
-  <a href="LICENSE"><img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-2e7a4c"></a>
-  <a href="https://intikhab49.github.io/pgvector-cpu-check/"><img alt="write-up" src="https://img.shields.io/badge/write--up-GitHub%20Pages-1b1b1a"></a>
-</p>
+<img src="docs/header.svg" alt="pgvector-cpu-check: find which CPUs crash your PostgreSQL or pgvector Docker image with Illegal instruction. The official pgvector, CloudNativePG, Supabase and Immich images run on every CPU model tested; TimescaleDB-HA, Tecnativa and Bitnami crash on several." width="100%">
 
-<p align="center">
-  <a href="#results-october-2026">Results</a> ·
-  <a href="#what-crashes-exactly">Faulting instructions</a> ·
-  <a href="#check-your-own-image-in-ci">Use in CI</a> ·
-  <a href="#how-to-fix-a-build">Fix your build</a> ·
-  <a href="#how-it-works">How it works</a> ·
-  <a href="#faq">FAQ</a>
-</p>
+# pgvector-cpu-check — which CPUs crash your PostgreSQL / pgvector Docker image
 
-# pgvector-cpu-check: which CPUs crash your PostgreSQL / pgvector Docker image with "Illegal instruction"
+**Replays your image on 7 CPU models, from a 2008 Nehalem to a Raspberry Pi and AWS Graviton2, names the exact instruction that kills PostgreSQL with `Illegal instruction`, and points at the one-line build fix. 13 popular images audited, 3 build bugs found.**
+
+[![Action test](https://img.shields.io/github/actions/workflow/status/intikhab49/pgvector-cpu-check/action-test.yml?style=for-the-badge&label=action%20test&color=1baf7a)](https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/action-test.yml)
+[![Release](https://img.shields.io/github/v/release/intikhab49/pgvector-cpu-check?style=for-the-badge&label=action&color=eb6834&logo=githubactions&logoColor=white)](https://github.com/intikhab49/pgvector-cpu-check/releases/latest)
+[![QEMU](https://img.shields.io/badge/QEMU-10.0%20user%20mode-2a78d6?style=for-the-badge&logo=qemu&logoColor=white)](#how-it-works)
+[![License](https://img.shields.io/badge/license-MIT-2a78d6?style=for-the-badge)](LICENSE)
+[![Write-up](https://img.shields.io/badge/write--up-GitHub%20Pages-0a0a14?style=for-the-badge&logo=githubpages&logoColor=white)](https://intikhab49.github.io/pgvector-cpu-check/)
+
+[Results](#results-october-2026) · [Faulting instructions](#what-crashes-exactly) · [Use in CI](#check-your-own-image-in-ci) · [Fix your build](#how-to-fix-a-build) · [How it works](#how-it-works) · [FAQ](#faq)
+
+</div>
+
+---
+
+## What this is
 
 **`server process was terminated by signal 4: Illegal instruction`**. If PostgreSQL dies like this right after
 `CREATE EXTENSION vector`, an insert, or `CREATE INDEX ... USING hnsw`, the image you run was compiled for a newer
@@ -34,6 +33,8 @@ It is a GitHub Action, a set of scripts, and a weekly audit of popular PostgreSQ
 Each image runs the real PostgreSQL server natively and on emulated CPUs: **Nehalem** (SSE4.2, no AVX),
 **Sandy Bridge** (AVX), **Ivy Bridge** (AVX + F16C), **Haswell** (AVX2 + FMA, no AVX-512); on arm64
 **Cortex-A53 / A72** (Raspberry Pi 3 / 4, ARMv8.0) and **Neoverse N1** (AWS Graviton2, Ampere Altra).
+
+<img src="docs/charts/1_compatibility.png" alt="Grid of 11 image rows by 7 CPU models. Bitnami crashes on Nehalem, Sandy Bridge, Ivy Bridge, Haswell, Cortex-A53 and Cortex-A72 (first faulting instructions vpermt2d and fabs h); Tecnativa crashes on Nehalem, Sandy Bridge, Ivy Bridge and all three ARM models (shlx, vcvtps2ph, cntd); TimescaleDB-HA's pgvectorscale crashes on Nehalem, Sandy Bridge and Ivy Bridge (vinserti128 in the foldhash seed). The official pgvector, CloudNativePG, Supabase, ParadeDB, Immich, VectorChord, ankane and lifeboat images run on every model." width="100%">
 
 | Image (digest checked) | Extensions | amd64 | arm64 |
 |---|---|---|---|
@@ -79,6 +80,8 @@ crashes instead.
   ([evidence run](https://github.com/intikhab49/pgvector-cpu-check/actions/runs/37425193526)).
 - pgvectorscale: [issue #288](https://github.com/timescale/pgvectorscale/issues/288), the compiled-out CPU check.
 
+<img src="docs/charts/2_tecnativa_speed.png" alt="Two bar charts for the Tecnativa image built from its own master versus the one-line fix. HNSW index build over 20,000 vectors of 768 dimensions: 111.3 s versus 11.2 s on an AMD EPYC 9V45 (10.0 times faster) and 152.3 s versus 18.5 s on an AMD EPYC 7763 (8.2 times). 500 nearest-neighbour queries: 1.90 s versus 0.51 s and 2.70 s versus 0.71 s (3.8 times faster on both)." width="100%">
+
 ## Check your own image in CI
 
 ```yaml
@@ -117,6 +120,29 @@ Locally (Linux, Docker): `bash scripts/probe.sh pgvector/pgvector:pg17 amd64 out
   generic and use `#[target_feature(enable = "...")]` kernels chosen at runtime, as VectorChord does.
 
 ## How it works
+
+```mermaid
+flowchart LR
+    IMG["your image<br/><i>any PostgreSQL tag</i>"] --> L["+ static QEMU 10<br/>user-mode binary"]
+    L --> N["native run<br/><i>reference</i>"]
+    L --> E["postmaster under<br/>qemu -cpu MODEL<br/><i>backends + parallel workers stay emulated</i>"]
+    E --> SU["suites: pgvector · halfvec · HNSW · IVFFlat<br/>DiskANN · vchordrq · BM25 · TimescaleDB"]
+    SU -->|SIGILL| C["guest core"]
+    C --> LM["rebuild link_map<br/>from raw core memory"]
+    LM --> I["faulting instruction<br/>+ function + library"]
+    SU -->|all pass| OK["runs on this CPU"]
+    IMG --> FP["static fingerprint<br/><i>ISA per function + dispatch</i>"]
+
+    style E fill:#2a78d6,stroke:#1c5cab,color:#fff
+    style I fill:#d03b3b,stroke:#a32d2d,color:#fff
+    style OK fill:#1baf7a,stroke:#158a60,color:#fff
+    style L fill:#f0efec,stroke:#c3c2b7,color:#0b0b0b
+    style N fill:#f0efec,stroke:#c3c2b7,color:#0b0b0b
+    style SU fill:#f0efec,stroke:#c3c2b7,color:#0b0b0b
+    style C fill:#f0efec,stroke:#c3c2b7,color:#0b0b0b
+    style LM fill:#f0efec,stroke:#c3c2b7,color:#0b0b0b
+    style FP fill:#f0efec,stroke:#c3c2b7,color:#0b0b0b
+```
 
 1. **Dynamic.** A static QEMU 10 user-mode binary is layered into the image. The real postmaster runs under
    `qemu -cpu <model>`; every backend and parallel worker it forks stays on the emulated CPU. Each suite

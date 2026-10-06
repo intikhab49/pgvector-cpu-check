@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340"
+     viewBox="0 0 1200 340" role="img"
+     aria-label="pgvector-cpu-check: find which CPUs crash your PostgreSQL or pgvector Docker image with
+     Illegal instruction. Grid of the audit: the official pgvector, CloudNativePG, Supabase and Immich
+     images run on every CPU model; TimescaleDB-HA, Tecnativa and Bitnami crash on several.">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#FFB020"/>
+      <stop offset="55%" stop-color="#FF6B4A"/>
+      <stop offset="100%" stop-color="#FF4E88"/>
+    </linearGradient>
+    <linearGradient id="fade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FF6B4A" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#0A0A14" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+      <path d="M28 0 L0 0 0 28" fill="none" stroke="#FFFFFF" stroke-opacity="0.04" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="340" fill="#0A0A14"/>
+  <rect width="1200" height="340" fill="url(#grid)"/>
+  <circle cx="1040" cy="70" r="240" fill="url(#fade)"/>
+
+  <text x="64" y="86" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" letter-spacing="3.5" fill="#A3E635">POSTGRESQL &#183; PGVECTOR &#183; SIGILL</text>
+
+  <text x="60" y="160" font-family="Georgia,'Times New Roman',serif" font-size="60" font-weight="700"
+        fill="url(#grad)">pgvector-cpu-check</text>
+
+  <text x="64" y="202" font-family="-apple-system,Segoe UI,Helvetica,sans-serif" font-size="19" fill="#E8E8F0">Which CPUs crash your Postgres image, before your users find out.</text>
+  <text x="64" y="230" font-family="-apple-system,Segoe UI,Helvetica,sans-serif" font-size="19" fill="#8B8BA7">7 CPU models &#8594; the faulting instruction &#8594; the build fix.</text>
+
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12">
+    <rect x="64" y="262" width="104" height="28" rx="14" fill="none" stroke="#FFB020" stroke-opacity="0.55"/><text x="116.0" y="281" fill="#FFB020" text-anchor="middle">13 IMAGES</text>
+    <rect x="180" y="262" width="122" height="28" rx="14" fill="none" stroke="#A3E635" stroke-opacity="0.55"/><text x="241.0" y="281" fill="#A3E635" text-anchor="middle">7 CPU MODELS</text>
+    <rect x="314" y="262" width="162" height="28" rx="14" fill="none" stroke="#5B9BFF" stroke-opacity="0.55"/><text x="395.0" y="281" fill="#5B9BFF" text-anchor="middle">3 BUILD BUGS FOUND</text>
+    <rect x="488" y="262" width="184" height="28" rx="14" fill="none" stroke="#FF4E88" stroke-opacity="0.55"/><text x="580.0" y="281" fill="#FF4E88" text-anchor="middle">EXACT FAULTING OPCODE</text>
+  </g>
+
+  <text x="764" y="58" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" letter-spacing="2" fill="#8B8BA7">CRASHES &#183; amd64 | arm64</text>
+  <g>
+    <text x="922.0" y="116" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8B8BA7" text-anchor="start" transform="rotate(-40 922.0 116)">Nehalem</text>
+    <text x="949.0" y="116" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8B8BA7" text-anchor="start" transform="rotate(-40 949.0 116)">Sandy</text>
+    <text x="976.0" y="116" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8B8BA7" text-anchor="start" transform="rotate(-40 976.0 116)">Ivy</text>
+    <text x="1003.0" y="116" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8B8BA7" text-anchor="start" transform="rotate(-40 1003.0 116)">Haswell</text>
+    <text x="1030.0" y="116" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8B8BA7" text-anchor="start" transform="rotate(-40 1030.0 116)">A53</text>
+    <text x="1057.0" y="116" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8B8BA7" text-anchor="start" transform="rotate(-40 1057.0 116)">A72</text>
+    <text x="1084.0" y="116" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="10" fill="#8B8BA7" text-anchor="start" transform="rotate(-40 1084.0 116)">N1</text>
+    <line x1="1019.0" y1="120" x2="1019.0" y2="313" stroke="#FFFFFF" stroke-opacity="0.18" stroke-dasharray="3 3"/>
+    <text x="902" y="139.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#8B8BA7" text-anchor="end">pgvector (official)</text>
+    <rect x="914.5" y="124.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="941.5" y="124.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="968.5" y="124.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="995.5" y="124.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1022.5" y="124.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1049.5" y="124.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1076.5" y="124.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <text x="902" y="166.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#8B8BA7" text-anchor="end">CloudNativePG</text>
+    <rect x="914.5" y="151.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="941.5" y="151.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="968.5" y="151.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="995.5" y="151.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1022.5" y="151.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1049.5" y="151.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1076.5" y="151.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <text x="902" y="193.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#8B8BA7" text-anchor="end">Supabase</text>
+    <rect x="914.5" y="178.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="941.5" y="178.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="968.5" y="178.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="995.5" y="178.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1022.5" y="178.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1049.5" y="178.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1076.5" y="178.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <text x="902" y="220.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#8B8BA7" text-anchor="end">Immich / VectorChord</text>
+    <rect x="914.5" y="205.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="941.5" y="205.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="968.5" y="205.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="995.5" y="205.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1022.5" y="205.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1049.5" y="205.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1076.5" y="205.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <text x="902" y="247.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#FFFFFF" text-anchor="end">TimescaleDB-HA</text>
+    <rect x="914" y="232.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="941" y="232.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="968" y="232.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="995.5" y="232.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1022.5" y="232.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1049.5" y="232.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1076.5" y="232.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <text x="902" y="274.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#FFFFFF" text-anchor="end">Tecnativa</text>
+    <rect x="914" y="259.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="941" y="259.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="968" y="259.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="995.5" y="259.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+    <rect x="1022" y="259.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="1049" y="259.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="1076" y="259.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <text x="902" y="301.0" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#FFFFFF" text-anchor="end">Bitnami</text>
+    <rect x="914" y="286.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="941" y="286.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="968" y="286.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="995" y="286.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="1022" y="286.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="1049" y="286.0" width="22" height="22" rx="4" fill="url(#grad)"/>
+    <rect x="1076.5" y="286.5" width="21" height="21" rx="4" fill="#A3E635" fill-opacity="0.10" stroke="#A3E635" stroke-opacity="0.45"/>
+  </g>
+</svg>

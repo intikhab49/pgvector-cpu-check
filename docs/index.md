@@ -4,7 +4,7 @@ description: "An audit of 13 PostgreSQL vector images (pgvector, pgvectorscale, 
 image: /assets/banner.png
 ---
 
-<img class="banner" src="{{ '/assets/banner.png' | relative_url }}" alt="Your Postgres image works here. On older CPUs it crashes: pgvector-cpu-check replays the crash on 7 CPU models and names the faulting instruction">
+<img class="banner" src="{{ '/header.svg' | relative_url }}" alt="pgvector-cpu-check: grid of the audit, the official pgvector, CloudNativePG, Supabase and Immich images run on every CPU model tested; TimescaleDB-HA, Tecnativa and Bitnami crash on several.">
 
 ## The error
 
@@ -42,6 +42,8 @@ Cortex-A53 and Cortex-A72 (Raspberry Pi 3 and 4), Neoverse N1 (AWS Graviton2, Am
 runner CPU. Bitnami's amd64 image also crashed natively on real AMD EPYC 7763 servers, and on an EPYC 9V74 VM
 whose hypervisor hid AVX-512 (it passed on the same model when AVX-512 was exposed).
 
+<img src="{{ '/charts/1_compatibility.png' | relative_url }}" alt="Grid of images by CPU model: Bitnami, Tecnativa and TimescaleDB-HA's pgvectorscale crash on several models; the official pgvector, CloudNativePG, Supabase, ParadeDB, Immich, VectorChord, ankane and lifeboat images run on all of them.">
+
 ## The exact instructions
 
 | Image | CPU | Instruction | Function | Why |
@@ -61,6 +63,8 @@ PostgreSQL's own CFLAGS, so pgvector is compiled without `-O2`, `-fwrapv` and `-
 functions set up a frame pointer, against 3 of 697 when built with `make OPTFLAGS=""`). And because "native"
 depends on the build machine, the same Dockerfile built on an AVX-512 runner produced a library that crashes on
 Haswell too.
+
+<img src="{{ '/charts/2_tecnativa_speed.png' | relative_url }}" alt="Tecnativa image, their build versus make OPTFLAGS: HNSW build 111.3 s versus 11.2 s and 152.3 s versus 18.5 s; 500 queries 1.90 s versus 0.51 s and 2.70 s versus 0.71 s.">
 
 **A guard that is compiled away.** pgvectorscale checks `is_x86_feature_detected!("avx2")` and `("fma")` in
 `_PG_init` and panics with a clear message. Built with `-Ctarget-feature=+avx2,+fma`, Rust evaluates both checks to
