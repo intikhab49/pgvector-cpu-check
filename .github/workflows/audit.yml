@@ -1,6 +1,8 @@
 name: audit
 
 on:
+  schedule:
+    - cron: "17 5 * * 1"   # weekly: images change under their tags
   workflow_dispatch:
     inputs:
       filter:
@@ -24,8 +26,8 @@ jobs:
       - uses: actions/checkout@v7
       - id: m
         env:
-          FILTER: ${{ inputs.filter }}
-          ARCHES: ${{ inputs.arches }}
+          FILTER: ${{ inputs.filter || '' }}
+          ARCHES: ${{ inputs.arches || 'amd64 arm64' }}
         run: |
           python3 - <<'EOF' >> "$GITHUB_OUTPUT"
           import json, os, re

@@ -93,20 +93,21 @@ jobs:
           done
       - name: Code size of vector.so
         run: |
-          od="objdump"; [ "${{ matrix.arch }}" = arm64 ] && od="aarch64-linux-gnu-objdump"
+          od="objdump"; sz="size"
+          if [ "${{ matrix.arch }}" = arm64 ]; then od="aarch64-linux-gnu-objdump"; sz="aarch64-linux-gnu-size"; fi
           for v in upstream fixed; do
             cid=$(docker create --platform "linux/${{ matrix.arch }}" "local/tecnativa-$v:$BASE_TAG")
             docker cp "$cid:/usr/local/lib/postgresql/vector.so" "out/$v/vector.so" && docker rm "$cid" >/dev/null
-            text=$(size -A "out/$v/vector.so" | awk '$1==".text"{print $2}')
+            text=$($sz -A "out/$v/vector.so" | awk '$1==".text"{print $2}')
             funcs=$($od -d "out/$v/vector.so" | grep -cE '^[0-9a-f]+ <.*>:$')
             fp=$($od -d "out/$v/vector.so" | grep -cE 'mov +%rsp,%rbp|mov +x29, sp')
             printf '%s\ttext_bytes=%s\tfunctions=%s\tframe_pointer_setups=%s\n' "$v" "$text" "$funcs" "$fp" | tee -a out/size.tsv
           done
-      - name: Speed (amd64 natively; same runner, alternating, 3 rounds)
+      - name: Speed (amd64 natively; same runner, alternating, 5 rounds)
         if: matrix.arch == 'amd64'
         run: |
           grep -m1 'model name' /proc/cpuinfo | tee out/bench-host.txt
-          for round in 1 2 3; do
+          for round in 1 2 3 4 5; do
             for v in upstream fixed; do
               printf '%s\t%s\t%s\n' "$v" "$round" "$(bash scripts/bench.sh "local/tecnativa-$v:$BASE_TAG")" | tee -a out/bench.tsv
             done
@@ -118,7 +119,7 @@ jobs:
             echo "## ${{ matrix.arch }}"
             echo '```diff'; cat patch.diff; echo '```'
             for v in upstream fixed; do echo "### $v"; echo '```'; cat "out/$v/results.tsv"; cat "out/$v/explain.tsv" 2>/dev/null; cat "out/$v/fingerprint.tsv"; echo '```'; done
-            echo '```'; cat out/size.tsv out/bench-host.txt out/bench.tsv 2>/dev/null; echo '```'
+            echo '```'; cat out/size.tsv out/bench-host.txt out/bench.tsv 2>/dev/null || true; echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         if: always()

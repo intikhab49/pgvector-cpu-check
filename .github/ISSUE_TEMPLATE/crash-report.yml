@@ -1,0 +1,28 @@
+name: Crash or wrong result
+description: The check missed a crash, reported one that does not happen, or named the wrong instruction
+labels: [bug]
+body:
+  - type: input
+    id: image
+    attributes:
+      label: Image and tag (and digest if you have it)
+    validations:
+      required: true
+  - type: input
+    id: cpu
+    attributes:
+      label: Your CPU or VM type
+      description: Output of `grep -m1 "model name" /proc/cpuinfo` and `grep -o -w -E "avx|avx2|avx512f|fma|f16c" /proc/cpuinfo | sort -u` (x86), or `lscpu` (arm64)
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Server log
+      description: The lines around "terminated by signal 4" or "Illegal instruction"
+      render: text
+  - type: textarea
+    id: report
+    attributes:
+      label: What the check reported
+      render: markdown

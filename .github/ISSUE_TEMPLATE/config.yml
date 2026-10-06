@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: pgvector itself
+    url: https://github.com/pgvector/pgvector/issues
+    about: Bugs in pgvector's code (not in how an image built it) belong upstream.

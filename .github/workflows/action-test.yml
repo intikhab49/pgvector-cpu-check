@@ -1,0 +1,42 @@
+name: action test
+
+# The action against two known images: the official pgvector image must pass on every CPU model,
+# Bitnami's must be caught crashing (its pgvector is built with -march=native).
+
+on:
+  push:
+    branches: [main]
+    paths: [action.yml, scripts/**, .github/workflows/action-test.yml]
+  pull_request:
+    paths: [action.yml, scripts/**, .github/workflows/action-test.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-image-passes:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./
+        with:
+          image: pgvector/pgvector:pg17-trixie
+          platforms: amd64
+
+  crashing-image-is-caught:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - id: check
+        uses: ./
+        with:
+          image: bitnami/postgresql:latest
+          platforms: amd64
+          fail-on-crash: "false"
+      - name: The action must report the crash
+        env:
+          CRASHED: ${{ steps.check.outputs.crashed }}
+        run: |
+          test "$CRASHED" = true || { echo "::error::expected a crash, got crashed=$CRASHED"; exit 1; }
+          grep -q "vpermt2d\|vmovsd\|Illegal instruction" "${{ steps.check.outputs.report }}"

@@ -1,0 +1,25 @@
+name: Check an image
+description: Ask for a PostgreSQL / pgvector image to be added to the weekly CPU audit
+title: "Audit: <image:tag>"
+labels: [image-request]
+body:
+  - type: input
+    id: image
+    attributes:
+      label: Image and tag
+      placeholder: e.g. ghcr.io/example/postgres:17-pgvector
+    validations:
+      required: true
+  - type: dropdown
+    id: arches
+    attributes:
+      label: Architectures
+      multiple: true
+      options: [amd64, arm64]
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Context
+      description: Where is it used? Did you see "Illegal instruction" / "terminated by signal 4"? On which CPU or VM type?

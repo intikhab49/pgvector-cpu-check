@@ -1,0 +1,81 @@
+name: pgvector CPU check
+description: Find the CPUs a PostgreSQL/pgvector Docker image crashes on (Illegal instruction, SIGILL) and the instruction that does it
+author: intikhab49
+branding:
+  icon: cpu
+  color: orange
+
+inputs:
+  image:
+    description: PostgreSQL image to check, e.g. pgvector/pgvector:pg17 or a tag you just built with docker buildx --load
+    required: true
+  platforms:
+    description: Architectures to check, space-separated (amd64 and/or arm64)
+    required: false
+    default: amd64 arm64
+  local-image:
+    description: "true if the image was built on this runner and must not be pulled"
+    required: false
+    default: "false"
+  fail-on-crash:
+    description: "true: fail the step when any CPU model crashes"
+    required: false
+    default: "true"
+
+outputs:
+  crashed:
+    description: "true if the image crashed on at least one CPU model"
+    value: ${{ steps.report.outputs.crashed }}
+  report:
+    description: Path of the markdown report
+    value: ${{ steps.report.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - name: QEMU for arm64 images
+      if: contains(inputs.platforms, 'arm64')
+      uses: docker/setup-qemu-action@v4
+      with:
+        platforms: arm64
+    - name: Tools (gdb-multiarch, aarch64 binutils) and core dumps
+      shell: bash
+      run: |
+        sudo apt-get -o Acquire::Retries=5 update -qq
+        sudo apt-get -o Acquire::Retries=5 install -y -qq --no-install-recommends gdb-multiarch binutils-aarch64-linux-gnu >/dev/null
+        sudo sysctl -q -w kernel.core_pattern=/cores/core.native.%p
+    - name: Probe
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        PLATFORMS: ${{ inputs.platforms }}
+        LOCAL: ${{ inputs.local-image }}
+      run: |
+        root="$RUNNER_TEMP/pgvector-cpu-check"
+        rm -rf "$root" && mkdir -p "$root"
+        for arch in $PLATFORMS; do
+          out="$root/$arch"
+          if [ "$LOCAL" = "true" ]; then export LOCAL_IMAGE=1; fi
+          bash "$GITHUB_ACTION_PATH/scripts/probe.sh" "$IMAGE" "$arch" "$out"
+          jq -n --arg name "$IMAGE" --arg ref "$IMAGE" --arg arch "$arch" '{name: $name, ref: $ref, arch: $arch}' > "$out/meta.json"
+        done
+    - name: Report
+      id: report
+      shell: bash
+      env:
+        FAIL_ON_CRASH: ${{ inputs.fail-on-crash }}
+      run: |
+        root="$RUNNER_TEMP/pgvector-cpu-check"
+        python3 "$GITHUB_ACTION_PATH/scripts/report.py" "$root" > "$root/report.md"
+        cat "$root/report.md" >> "$GITHUB_STEP_SUMMARY"
+        echo "report=$root/report.md" >> "$GITHUB_OUTPUT"
+        # a crash = a failure on an emulated CPU, or a native failure by signal (not a test that errors everywhere)
+        crashes="$(awk -F'\t' '$3=="FAIL" && ($2!="native" || $4 ~ /signal/)' "$root"/*/results.tsv)"
+        if [ -n "$crashes" ]; then
+          echo "crashed=true" >> "$GITHUB_OUTPUT"
+          echo "::warning::$(head -n1 <<<"$crashes" | cut -f1-2,4 | tr '\t' ' ')"
+          [ "$FAIL_ON_CRASH" = "true" ] && { echo "::error::The image crashes on at least one CPU model; see the job summary."; exit 1; }
+        else
+          echo "crashed=false" >> "$GITHUB_OUTPUT"
+        fi
+        exit 0
