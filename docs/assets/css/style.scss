@@ -33,6 +33,9 @@ body { background: $surface; color: $ink; }
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    font-size: 2.3rem;
+    line-height: 1.2;
+    max-width: 52rem;
   }
   .project-tagline { color: #e8e8f0; opacity: 1; }
   .btn {
