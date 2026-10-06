@@ -1,4 +1,4 @@
-title: "pgvector \"Illegal instruction\": which PostgreSQL Docker images crash on which CPUs"
+title: "pgvector-cpu-check"
 description: "PostgreSQL crashes with \"terminated by signal 4: Illegal instruction\" after CREATE EXTENSION vector or an HNSW index build? An audit of pgvector, pgvectorscale, VectorChord and ParadeDB images on emulated x86 and ARM CPUs, with the exact faulting instruction and the one-line build fix."
 url: "https://intikhab49.github.io"
 baseurl: "/pgvector-cpu-check"
