@@ -20,7 +20,7 @@ machine that built it. That machine might have had AVX-512, AVX2, or on ARM, SVE
 VM, Raspberry Pi or Graviton2 instance does not.
 
 This page is an audit of popular images, run with
-[pgvector-cpu-check](https://github.com/intikhab49/pgvector-cpu-check), which you can also run on your own image in CI.
+[pgvector-cpu-check](https://github.com/intikhab49/pgvector-cpu-check), which you can also run on your own image in CI ([GitHub Marketplace](https://github.com/marketplace/actions/pgvector-cpu-check)).
 
 ## Which images are affected (October 2026)
 
