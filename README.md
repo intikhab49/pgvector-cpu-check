@@ -1,16 +1,33 @@
+<p align="center">
+  <img src="assets/banner.png" width="100%" alt="Your Postgres image works here. On older CPUs it crashes. pgvector-cpu-check replays the crash on 7 CPU models and names the faulting instruction, then the build fix.">
+</p>
+
+<p align="center">
+  <a href="https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/action-test.yml"><img alt="action test" src="https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/action-test.yml/badge.svg"></a>
+  <a href="https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/audit.yml"><img alt="weekly audit" src="https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/audit.yml/badge.svg"></a>
+  <a href="https://github.com/intikhab49/pgvector-cpu-check/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/intikhab49/pgvector-cpu-check?color=e0a526&label=action"></a>
+  <a href="LICENSE"><img alt="license: MIT" src="https://img.shields.io/badge/license-MIT-2e7a4c"></a>
+  <a href="https://intikhab49.github.io/pgvector-cpu-check/"><img alt="write-up" src="https://img.shields.io/badge/write--up-GitHub%20Pages-1b1b1a"></a>
+</p>
+
+<p align="center">
+  <a href="#results-october-2026">Results</a> ·
+  <a href="#what-crashes-exactly">Faulting instructions</a> ·
+  <a href="#check-your-own-image-in-ci">Use in CI</a> ·
+  <a href="#how-to-fix-a-build">Fix your build</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#faq">FAQ</a>
+</p>
+
 # pgvector-cpu-check: which CPUs crash your PostgreSQL / pgvector Docker image with "Illegal instruction"
 
-**`server process was terminated by signal 4: Illegal instruction`** — if PostgreSQL dies like this right after
+**`server process was terminated by signal 4: Illegal instruction`**. If PostgreSQL dies like this right after
 `CREATE EXTENSION vector`, an insert, or `CREATE INDEX ... USING hnsw`, the image you run was compiled for a newer
 CPU than the one under it. This repository finds out **which CPUs an image runs on, before your users do**, and
 names the exact machine instruction, function and library that crashes.
 
 It is a GitHub Action, a set of scripts, and a weekly audit of popular PostgreSQL vector images
 (pgvector, pgvectorscale, VectorChord, pgvecto.rs, ParadeDB `pg_search`, TimescaleDB) on amd64 and arm64.
-
-[![action test](https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/action-test.yml/badge.svg)](https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/action-test.yml)
-[![audit](https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/audit.yml/badge.svg)](https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/audit.yml)
-[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## Results (October 2026)
 

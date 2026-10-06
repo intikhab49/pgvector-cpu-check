@@ -3,6 +3,10 @@ description: "PostgreSQL crashes with \"terminated by signal 4: Illegal instruct
 url: "https://intikhab49.github.io"
 baseurl: "/pgvector-cpu-check"
 lang: en
+image: /assets/banner.png
+twitter:
+  card: summary_large_image
+logo: /apple-touch-icon.png
 author: Intikhab Azam
 theme: jekyll-theme-cayman
 plugins:

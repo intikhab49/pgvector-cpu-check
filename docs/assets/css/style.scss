@@ -1,0 +1,36 @@
+---
+---
+
+@import "{{ site.theme }}";
+
+// Palette of the banner: warm paper, ink, amber highlight, signal red, fix green.
+$paper: #f4f0e7;
+$ink: #1b1b1a;
+$amber: #ffd666;
+$red: #c8402b;
+$green: #2e7a4c;
+
+body { background: $paper; color: $ink; }
+
+.page-header {
+  background-color: $ink;
+  background-image: linear-gradient(120deg, #1b1b1a, #3a3327);
+  .project-name { font-family: Georgia, "Times New Roman", serif; font-weight: 700; }
+  .project-tagline { color: #e8e1d2; opacity: 1; }
+  .btn { border-color: rgba($amber, 0.6); color: #fff; }
+  .btn:hover { background-color: rgba($amber, 0.25); }
+}
+
+.main-content {
+  h1, h2, h3 { color: $ink; font-family: Georgia, "Times New Roman", serif; }
+  h2 { border-bottom: 3px solid $amber; padding-bottom: 0.2rem; }
+  a { color: #8a5a00; }
+  code { background: #ece6d9; color: $ink; }
+  pre { background: #1e1e1c; border: 0; border-radius: 10px; }
+  pre code { color: #e8e1d2; background: transparent; }
+  table { display: table; width: 100%; border-collapse: collapse; }
+  table th { background: #ece6d9; }
+  table td, table th { border-color: #ddd5c4; }
+  img.banner { width: 100%; border-radius: 12px; box-shadow: 0 12px 30px rgba(60, 45, 30, 0.18); margin: 0 0 1.5rem; }
+  .site-footer { border-top-color: #ddd5c4; }
+}
