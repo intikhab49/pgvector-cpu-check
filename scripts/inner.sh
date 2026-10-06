@@ -65,7 +65,7 @@ items_sql="CREATE TABLE items AS
   FROM generate_series(1, 3000) g;
 CREATE TABLE q AS SELECT e AS q FROM items WHERE id = 1;"
 
-declare -A SUITE_SQL SUITE_PRELOAD SUITE_EXT
+declare -A SUITE_SQL SUITE_PRELOAD SUITE_EXT SUITE_MINVER
 SUITE_EXT[server]=""
 SUITE_SQL[server]="SELECT 'cpuaudit-ok';"
 
@@ -73,17 +73,26 @@ SUITE_EXT[pgvector]=vector
 SUITE_SQL[pgvector]="CREATE EXTENSION IF NOT EXISTS vector;
 SET max_parallel_maintenance_workers = 2; SET min_parallel_table_scan_size = 0; SET maintenance_work_mem = '256MB';
 $items_sql
-SELECT sum(e <-> q)::numeric(14,3) AS l2, sum(e <=> q)::numeric(14,3) AS cos, sum(e <#> q)::numeric(14,3) AS ip,
-       sum(l1_distance(e, q))::numeric(14,3) AS l1 FROM items, q;
+SELECT sum(e <-> q)::numeric(14,3) AS l2, sum(e <=> q)::numeric(14,3) AS cos, sum(e <#> q)::numeric(14,3) AS ip FROM items, q;
+CREATE INDEX ON items USING hnsw (e vector_l2_ops);
+CREATE INDEX ON items USING ivfflat (e vector_ip_ops) WITH (lists = 20);
+SET enable_seqscan = off;
+SELECT array_agg(id) AS knn FROM (SELECT id FROM items, q ORDER BY e <-> q LIMIT 5) s;
+SELECT 'cpuaudit-ok';"
+
+# halfvec, sparsevec, bit and l1_distance arrived in pgvector 0.7.0
+SUITE_EXT[pgvector_07]=vector
+SUITE_MINVER[pgvector_07]=0.7.0
+SUITE_SQL[pgvector_07]="CREATE EXTENSION IF NOT EXISTS vector;
+SET max_parallel_maintenance_workers = 2; SET min_parallel_table_scan_size = 0; SET maintenance_work_mem = '256MB';
+$items_sql
+SELECT sum(l1_distance(e, q))::numeric(14,3) AS l1 FROM items, q;
 SELECT sum(e::halfvec(128) <-> q::halfvec(128))::numeric(14,2) AS l2_half,
        sum(e::halfvec(128) <=> q::halfvec(128))::numeric(14,2) AS cos_half FROM items, q;
 SELECT sum(e::sparsevec <-> q::sparsevec)::numeric(14,2) AS l2_sparse FROM items, q;
 SELECT sum(binary_quantize(e) <~> binary_quantize(q)) AS hamming FROM items, q;
-CREATE INDEX ON items USING hnsw (e vector_l2_ops);
 CREATE INDEX ON items USING hnsw ((e::halfvec(128)) halfvec_cosine_ops);
-CREATE INDEX ON items USING ivfflat (e vector_ip_ops) WITH (lists = 20);
 SET enable_seqscan = off;
-SELECT array_agg(id) AS knn FROM (SELECT id FROM items, q ORDER BY e <-> q LIMIT 5) s;
 SELECT array_agg(id) AS knn_half FROM (SELECT id FROM items, q ORDER BY e::halfvec(128) <=> q::halfvec(128) LIMIT 5) s;
 SELECT 'cpuaudit-ok';"
 
@@ -123,7 +132,7 @@ SELECT array_agg(id) AS knn FROM (SELECT id FROM items2 ORDER BY e <-> (SELECT e
 SELECT 'cpuaudit-ok';"
 
 SUITE_EXT[pg_search]=pg_search
-SUITE_SQL[pg_search]="CREATE EXTENSION IF NOT EXISTS pg_search;
+SUITE_SQL[pg_search]="CREATE EXTENSION IF NOT EXISTS pg_search CASCADE;
 CREATE TABLE docs AS SELECT g AS id, 'word' || (g % 50) || ' text number ' || g AS body FROM generate_series(1, 3000) g;
 CREATE INDEX docs_bm25 ON docs USING bm25 (id, body) WITH (key_field = 'id');
 SELECT count(*) AS hits FROM docs WHERE body @@@ 'word7';
@@ -141,7 +150,20 @@ SELECT count(compress_chunk(c)) AS compressed FROM show_chunks('m') c;
 SELECT count(*) AS rows_after FROM m;
 SELECT 'cpuaudit-ok';"
 
-SUITES="server pgvector vectorscale vchord pgvecto_rs pg_search timescaledb"
+SUITES="server pgvector pgvector_07 vectorscale vchord pgvecto_rs pg_search timescaledb"
+
+# QEMU user mode runs ELF files only. Nix images (Supabase) ship bin/postgres as a makeWrapper script:
+# replay its exports and follow its exec target to the real binary.
+pg_exe="$PG_BIN/postgres"
+for _ in 1 2 3 4; do
+  pg_exe="$(readlink -f "$pg_exe")"
+  [[ "$(head -c4 "$pg_exe" | od -An -tx1 | tr -d ' \n')" == 7f454c46 ]] && break
+  eval "$(grep -E '^export [A-Za-z_][A-Za-z0-9_]*=' "$pg_exe")"
+  next="$(grep -m1 -E '^exec ' "$pg_exe" | grep -oE '"/[^"]+"' | tr -d '"' | tail -n1)"
+  [[ -n "$next" ]] || break
+  pg_exe="$next"
+done
+echo "INFO	pg_exe	$pg_exe"
 
 server_pid=""
 start_server() { # start_server CPU PRELOAD
@@ -149,7 +171,7 @@ start_server() { # start_server CPU PRELOAD
   [[ "$cpu" == native ]] || runner=(/usr/local/bin/cpuaudit-qemu -cpu "$cpu")
   rm -f "$data/postmaster.pid"
   : > "$log"
-  "${runner[@]}" "$PG_BIN/postgres" -D "$data" -k "$sock" -c listen_addresses='' \
+  "${runner[@]}" "$pg_exe" -D "$data" -k "$sock" -c listen_addresses='' \
     -c shared_preload_libraries="$preload" -c max_worker_processes=16 -c fsync=off -c shared_buffers=16MB \
     -c timescaledb.telemetry_level=off \
     -c log_min_messages=log >>"$log" 2>&1 &
@@ -246,6 +268,11 @@ done
 for s in $SUITES; do
   ext="${SUITE_EXT[$s]}"
   if [[ -n "$ext" && " $available " != *" $ext="* ]]; then continue; fi
+  minver="${SUITE_MINVER[$s]:-}"
+  if [[ -n "$minver" ]]; then
+    have="$(grep -oE "(^| )$ext=[^ ]+" <<<" $available" | cut -d= -f2)"
+    [[ "$(printf '%s\n%s\n' "$minver" "$have" | sort -V | head -n1)" == "$minver" ]] || continue
+  fi
   native="$(run_suite "$s" native)"
   printf 'RESULT\t%s\tnative\t%s\n' "$s" "$native"
   # A native SIGILL still runs every CPU model: each one's core shows where its floor is.

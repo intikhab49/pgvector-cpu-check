@@ -29,7 +29,8 @@ X86 = {
 }
 ARM = {
     "sve": re.compile(r"\bz\d+\.[bhsdq]\b|\bp\d+/[mz]\b|\bwhilelo\b|\bptrue\b"),
-    "fp16": re.compile(r"\bf\w+\s.*\bv\d+\.[48]h\b|\bf(add|sub|mul|mla|mls|max|min|div|abs|neg|sqrt|cvt\w*)\s+h\d+"),
+    # FEAT_FP16 = half-precision ARITHMETIC. Conversions (fcvt/fcvtl/fcvtn between h and s) are ARMv8.0 base.
+    "fp16": re.compile(r"\bf(?!cvt)\w+\s.*\bv\d+\.[48]h\b|\bf(add|sub|mul|mla|mls|max|min|div|abs|neg|sqrt|cmp|cmpe|madd|msub|nmul|rint\w)\s+h\d+"),
     "dotprod": re.compile(r"\b[su]dot\b"),
     "lse": re.compile(r"\b(ldadd|ldclr|ldeor|ldset|ldsmax|ldsmin|ldumax|ldumin|swp|cas|casp)(a|l|al)?[bh]?\b"),
     "crypto": re.compile(r"\b(aes[ed]|aesi?mc|sha1[chmps]\w*|sha256\w*|sha512\w*|pmull2?)\b"),
@@ -43,6 +44,8 @@ FLOOR = [("avx512", "AVX-512 (fails on Haswell and every AMD before Zen 4)"), ("
         [("sve", "SVE (Neoverse V1/Graviton3+; not Pi, Graviton2, Ampere Altra)"), ("fp16", "ARMv8.2 FP16 (not Pi 3/4)"),
          ("dotprod", "ARMv8.2 dot product (not Pi 3/4)"), ("rcpc", "ARMv8.3 RCpc"), ("lse", "ARMv8.1 LSE atomics (not Pi 3/4)")]
 FUNC_RE = re.compile(r"^[0-9a-f]+ <(.+)>:$")
+DISPATCH_NAME = re.compile(r"(?i)avx|fma|f16c|sse|bmi|popcnt|neon|sve|fp16|asimd|::v[234]\b|_v[234]\b|x86[_-]64[_-]v"
+                           r"|haswell|skylake|icelake|znver|sapphire|cascade|_resolver|ifunc")
 
 
 def run(cmd):
@@ -53,7 +56,7 @@ def fingerprint(path):
     funcs = {}
     current = None
     cpuid = 0
-    proc = subprocess.Popen([OBJDUMP, "-d", "--no-show-raw-insn", str(path)], stdout=subprocess.PIPE,
+    proc = subprocess.Popen([OBJDUMP, "-d", "-C", "--no-show-raw-insn", str(path)], stdout=subprocess.PIPE,
                             text=True, errors="replace")
     for line in proc.stdout:
         line = line.rstrip("\n")
@@ -101,11 +104,15 @@ def fingerprint(path):
     # Verdict: the lowest CPU this library needs. Runtime dispatch guards a handful of kernels
     # (pgvector: ~2-6 functions with target attributes); a class found in more functions than that,
     # or in any function when there is no dispatch at all, came from a global compiler flag.
-    limit = 10 if evidence else 1
-    floor = next(((cls, label) for cls, label in FLOOR if counts.get(cls, 0) >= limit), None)
+    # Calibrated against the dynamic results: with dispatch present, the deliberately multiversioned kernels
+    # are named for their target (pgvector BitHammingDistanceAvx512Popcount, VectorChord simd::...::v4::...).
+    # Set those aside; a newer instruction in ANY remaining function means a global -march/target-cpu.
+    unguarded = {f: c for f, c in funcs.items() if not (evidence and DISPATCH_NAME.search(f))}
+    floor = next(((cls, label) for cls, label in FLOOR if any(cls in c for c in unguarded.values())), None)
     if floor:
-        sample = sorted(f for f, c in funcs.items() if floor[0] in c)[:4]
-        verdict = f"needs {floor[1]}: {floor[0]} in {counts[floor[0]]}/{len(funcs)} functions, e.g. {', '.join(sample)}"
+        sample = sorted(f for f, c in unguarded.items() if floor[0] in c)
+        verdict = (f"needs {floor[1]}: {floor[0]} in {len(sample)} unguarded of {len(funcs)} functions, "
+                   f"e.g. {', '.join(s[:60] for s in sample[:4])}")
     else:
         verdict = "baseline (newer instructions only behind dispatch)" if any(counts.get(c) for c, _ in FLOOR) else "baseline"
     cols = [path.name, f"functions={len(funcs)}"] + [f"{k}={v}" for k, v in counts.items() if v]

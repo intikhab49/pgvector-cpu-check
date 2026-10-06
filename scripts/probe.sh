@@ -64,6 +64,7 @@ grep '^INFO' "$out/inner.log" | cut -f2- >> "$out/info.tsv" || true
 # Static fingerprint of the extension libraries, and gdb on every core QEMU dumped.
 pkglib="$(awk -F'\t' '$1=="pkglibdir"{print $2}' "$out/info.tsv")"
 pg_bin="$(awk -F'\t' '$1=="pg_bin"{print $2}' "$out/info.tsv")"
+pg_exe="$(awk -F'\t' '$1=="pg_exe"{print $2}' "$out/info.tsv")"; pg_exe="${pg_exe:-$pg_bin/postgres}"
 cid="$(docker create --platform "linux/$arch" "$tag")"
 if [[ -n "$pkglib" ]]; then
   mkdir -p "$ctx/lib"
@@ -77,7 +78,7 @@ if compgen -G "$out/cores/*.core" >/dev/null && [[ -n "$pg_bin" ]]; then
   : > "$out/explain.tsv"
   for core in "$out"/cores/*.core; do
     key="$(basename "$core" .core)"
-    PKGLIB="$pkglib" bash "$here/explain.sh" "$arch" "$ctx/rootfs" "$pg_bin" "$core" > "$out/explain/$key.txt" 2>&1 || true
+    PKGLIB="$pkglib" bash "$here/explain.sh" "$arch" "$ctx/rootfs" "$pg_exe" "$core" > "$out/explain/$key.txt" 2>&1 || true
     printf '%s\t%s\t%s\n' "${key%@*}" "${key#*@}" "$(head -n1 "$out/explain/$key.txt")" >> "$out/explain.tsv"
   done
 fi
