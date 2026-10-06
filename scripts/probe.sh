@@ -20,7 +20,10 @@ case "$arch" in
 esac
 
 pulled=""
-for attempt in 1 2 3 4; do   # registries rate-limit bursts of parallel pulls (ghcr.io "toomanyrequests")
+# LOCAL_IMAGE=1: the image was just built on this runner (docker buildx --load), nothing to pull.
+[[ -n "${LOCAL_IMAGE:-}" ]] && docker image inspect "$image" >/dev/null 2>&1 && pulled=1
+for attempt in 1 2 3 4; do
+  [[ -n "$pulled" ]] && break   # registries rate-limit bursts of parallel pulls (ghcr.io "toomanyrequests")
   docker pull -q --platform "linux/$arch" "$image" >/dev/null 2>"$out/pull.err" && { pulled=1; break; }
   sleep $((attempt * 20))
 done
