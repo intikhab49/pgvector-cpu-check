@@ -100,7 +100,7 @@ jobs:
             docker cp "$cid:/usr/local/lib/postgresql/vector.so" "out/$v/vector.so" && docker rm "$cid" >/dev/null
             text=$($sz -A "out/$v/vector.so" | awk '$1==".text"{print $2}')
             funcs=$($od -d "out/$v/vector.so" | grep -cE '^[0-9a-f]+ <.*>:$')
-            fp=$($od -d "out/$v/vector.so" | grep -cE 'mov +%rsp,%rbp|mov +x29, sp')
+            fp=$($od -d "out/$v/vector.so" | grep -cE 'mov[[:space:]]+(%rsp,%rbp|x29, sp)' || true)
             printf '%s\ttext_bytes=%s\tfunctions=%s\tframe_pointer_setups=%s\n' "$v" "$text" "$funcs" "$fp" | tee -a out/size.tsv
           done
       - name: Speed (amd64 natively; same runner, alternating, 5 rounds)
@@ -118,7 +118,7 @@ jobs:
           {
             echo "## ${{ matrix.arch }}"
             echo '```diff'; cat patch.diff; echo '```'
-            for v in upstream fixed; do echo "### $v"; echo '```'; cat "out/$v/results.tsv"; cat "out/$v/explain.tsv" 2>/dev/null; cat "out/$v/fingerprint.tsv"; echo '```'; done
+            for v in upstream fixed; do echo "### $v"; echo '```'; cat "out/$v/results.tsv" "out/$v/explain.tsv" "out/$v/fingerprint.tsv" 2>/dev/null || true; echo '```'; done
             echo '```'; cat out/size.tsv out/bench-host.txt out/bench.tsv 2>/dev/null || true; echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
