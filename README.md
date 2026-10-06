@@ -8,6 +8,7 @@
 
 [![Action test](https://img.shields.io/github/actions/workflow/status/intikhab49/pgvector-cpu-check/action-test.yml?style=for-the-badge&label=action%20test&color=1baf7a)](https://github.com/intikhab49/pgvector-cpu-check/actions/workflows/action-test.yml)
 [![Release](https://img.shields.io/github/v/release/intikhab49/pgvector-cpu-check?style=for-the-badge&label=action&color=eb6834&logo=githubactions&logoColor=white)](https://github.com/intikhab49/pgvector-cpu-check/releases/latest)
+[![Marketplace](https://img.shields.io/badge/GitHub%20Marketplace-pgvector%20CPU%20check-1baf7a?style=for-the-badge&logo=github&logoColor=white)](https://github.com/marketplace/actions/pgvector-cpu-check)
 [![QEMU](https://img.shields.io/badge/QEMU-10.0%20user%20mode-2a78d6?style=for-the-badge&logo=qemu&logoColor=white)](#how-it-works)
 [![License](https://img.shields.io/badge/license-MIT-2a78d6?style=for-the-badge)](LICENSE)
 [![Write-up](https://img.shields.io/badge/write--up-GitHub%20Pages-0a0a14?style=for-the-badge&logo=githubpages&logoColor=white)](https://intikhab49.github.io/pgvector-cpu-check/)
