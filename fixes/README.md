@@ -37,4 +37,17 @@ docker build --build-arg BASE_TAG=18-alpine -t postgres-autoconf:portable .
    otherwise, instead of refusing to load.
 
 So the extension runs on every x86-64 CPU, and the workflow times it against the original on the same
-runner to show what the AVX2 path costs, if anything.
+runner to show what the AVX2 path costs.
+
+## Results ([run 37503383984](https://github.com/intikhab49/pgvector-cpu-check/actions/runs/37503383984))
+
+Every fixed image passed every suite on every CPU model, with the same query results as the original.
+Timings are medians of 5 alternating rounds on one runner (20,000 x 768 vectors, 500 queries):
+
+| Fix | Runner | Index build | 500 queries |
+|---|---|---|---|
+| Tecnativa (HNSW) | EPYC 9V74 | 166.5 s -> 19.0 s (8.7x faster) | 2.84 s -> 0.72 s (3.9x faster) |
+| pgvectorscale (DiskANN) | EPYC 7763 | 29.6 s -> 29.8 s (same) | 1.48 s -> 1.62 s (about 10% slower) |
+
+The pgvectorscale query cost is most likely the per-call CPU check in front of each distance kernel,
+which also stops those calls from inlining. Not fixed yet.
